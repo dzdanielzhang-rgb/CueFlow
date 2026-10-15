@@ -1,11 +1,13 @@
 {
   "name": "cueflow-timeline",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Dependency-free, local-first Obsidian show-run timeline",
   "scripts": {
-    "test": "node --check main.js && node tests/smoke.cjs && node tests/storage-smoke.cjs && node tests/groups-smoke.cjs && node tests/reliability.cjs && node tests/duration-smoke.cjs && node tests/lane-move-smoke.cjs && node tests/group-edit-width-smoke.cjs && node tests/canvas-smoke.cjs && node tests/connections-smoke.cjs && node tests/alignment-smoke.cjs",
-    "test:alignment": "node --check main.js && node tests/alignment-smoke.cjs"
+    "test": "node --check main.js && node tests/smoke.cjs && node tests/storage-smoke.cjs && node tests/groups-smoke.cjs && node tests/reliability.cjs && node tests/duration-smoke.cjs && node tests/lane-move-smoke.cjs && node tests/group-edit-width-smoke.cjs && node tests/canvas-smoke.cjs && node tests/connections-smoke.cjs && node tests/alignment-smoke.cjs && node tests/selection-smoke.cjs && node tests/project-files-smoke.cjs",
+    "test:alignment": "node --check main.js && node tests/alignment-smoke.cjs",
+    "test:selection": "node --check main.js && node tests/selection-smoke.cjs",
+    "test:files": "node --check main.js && node tests/project-files-smoke.cjs"
   },
   "license": "MIT"
 }

@@ -1,2 +1,4 @@
 91325404f610ad8459a5be82589524d4362d85b4f84143c44a0299a22d776159  cueflow-plugin-v0.6.0.zip
 2ca85a28742445de167c5c33c0e773b2fc73b3ce53fa87edeb8f7a9bfcb3feec  cueflow-plugin-v0.7.0.zip
+463cfcfeab8bbc6e112cf8306f335890c9f33f367e2627fb7f9c1452b9e98466  cueflow-plugin-v0.8.0.zip
+c8df5a33fa7ee309f622d6de3f6bcd58df981f312ed57b60eb5db801770ca66a  cueflow-plugin-v0.9.0.zip

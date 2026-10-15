@@ -67,11 +67,11 @@ function makeExample() {
   const flex = c('Flex 地面出动', 2, 190, 125, '提示地面机器人操作人员。');
   const actor = c('目标人员入场', 5, 195, 50, '场控通过耳返提示演员。');
   const mark = c('第一幕结束', 0, 330, 0, '里程碑：全部设备进入下一幕准备状态。', [search.id]);
-  return { version: 3, relations: [], dependencyLabels: [], name: '无人机空地协同演示（示例）', durationSec: 720, groups: deepCopy(DEFAULT_GROUPS), lanes, cues: [opening, mesh, search, cam, flex, actor, mark] };
+  return { version: 4, relations: [], dependencyLabels: [], name: '无人机空地协同演示（示例）', durationSec: 720, groups: deepCopy(DEFAULT_GROUPS), lanes, cues: [opening, mesh, search, cam, flex, actor, mark] };
 }
 function validateProject(obj) {
   if (!obj || !Array.isArray(obj.lanes) || !Array.isArray(obj.cues)) throw new Error('文件中缺少 lanes 或 cues 数组');
-  if (Number(obj.version) > 3) throw new Error('项目版本较新，请升级 CueFlow 后再打开');
+  if (Number(obj.version) > 4) throw new Error('项目版本较新，请升级 CueFlow 后再打开');
   const laneIds = new Set(), actionIds = new Set();
   for (const lane of obj.lanes) {
     if (!lane || typeof lane.id !== 'string' || !lane.id.trim()) throw new Error('泳道缺少有效 ID');
@@ -95,7 +95,7 @@ function validateProject(obj) {
   obj.groups = (legacy ? deepCopy(DEFAULT_GROUPS) : obj.groups)
     .filter(g => g && typeof g.id === 'string' && g.id.trim() && !groupIds.has(g.id) && groupIds.add(g.id))
     .map(g => ({ id: g.id, name: String(g.name || '未命名分组').trim() || '未命名分组' }));
-  obj.version = 3;
+  obj.version = 4;
   obj.name = typeof obj.name === 'string' ? obj.name : '未命名项目';
   obj.durationSec = clamp(Math.ceil(positive(obj.durationSec, 1200)), 60, 86400);
   obj.lanes = obj.lanes.filter(l => l && typeof l.id === 'string').map((l, i) => {
@@ -111,7 +111,7 @@ function validateProject(obj) {
       id: c.id, laneId: c.laneId, name: String(c.name || '未命名动作'),
       startSec: clamp(Math.round(Number(c.startSec) || 0), 0, 86400),
       durationSec: clamp(Math.round(Number(c.durationSec) || 0), 0, 86400),
-      note: String(c.note || ''),
+      note: String(c.note || ''), critical: c.critical === true,
       dependsOn: Array.isArray(c.dependsOn) ? c.dependsOn.filter(d => typeof d === 'string' && d !== c.id) : [],
       status: ['planned', 'active', 'done'].includes(c.status) ? c.status : 'planned'
     }));
@@ -227,12 +227,46 @@ function projectConnections(project) {
 function connectionRects(project, layout, scale, cueHeight, cueTop, override = null) {
   const boxes = new Map();
   for (let cue of project.cues) {
-    if (cue.id === override?.id) cue = { ...cue, ...override };
+    if (override instanceof Map && override.has(cue.id)) cue = { ...cue, ...override.get(cue.id) };
+    else if (cue.id === override?.id) cue = { ...cue, ...override };
     if (!layout.laneY.has(cue.laneId)) continue;
     boxes.set(cue.id, { id: cue.id, x: cue.startSec * scale, y: layout.laneY.get(cue.laneId) + cueTop,
       w: Math.max(cue.durationSec ? 20 : 18, cue.durationSec * scale), h: cueHeight });
   }
   return boxes;
+}
+function cuesInMarquee(boxes, rect) {
+  return [...boxes].filter(([, b]) => b.x < rect.right && b.x + b.w > rect.left && b.y < rect.bottom && b.y + b.h > rect.top).map(([id]) => id);
+}
+// Transform shared endpoints so internal gaps and dependency boundaries scale together.
+function transformCueSelection(project, ids, kind, deltaSec, laneDelta = 0, laneOrder = [], autoSchedule = false) {
+  const chosen = new Set(ids), cues = project.cues.filter(cue => chosen.has(cue.id));
+  if (!cues.length || !Number.isFinite(deltaSec)) return [];
+  const first = Math.min(...cues.map(c => c.startSec)), last = Math.max(...cues.map(c => c.startSec + c.durationSec));
+  if (kind === 'move') {
+    let minimum = -first;
+    if (autoSchedule) {
+      const byId = new Map(project.cues.map(c => [c.id, c]));
+      for (const cue of cues) for (const parentId of cue.dependsOn) if (!chosen.has(parentId)) {
+        const parent = byId.get(parentId); if (parent) minimum = Math.max(minimum, parent.startSec + parent.durationSec - cue.startSec);
+      }
+    }
+    const delta = clamp(Math.round(deltaSec), Math.min(minimum, 86400 - last), 86400 - last);
+    const indices = cues.map(c => laneOrder.indexOf(c.laneId));
+    const shift = laneOrder.length && indices.every(i => i >= 0) ? clamp(Math.round(laneDelta), -Math.min(...indices), laneOrder.length - 1 - Math.max(...indices)) : 0;
+    return cues.map(c => ({ ...c, startSec: c.startSec + delta, laneId: shift ? laneOrder[laneOrder.indexOf(c.laneId) + shift] : c.laneId }));
+  }
+  const span = last - first;
+  if (!span || !['resize-left', 'resize-right'].includes(kind)) return cues.map(c => ({ ...c }));
+  const minimumSpan = Math.max(1,...cues.filter(c => c.durationSec).map(c => Math.ceil(span/c.durationSec)));
+  const newFirst = kind === 'resize-left' ? clamp(first + Math.round(deltaSec), 0, last - minimumSpan) : first;
+  const newLast = kind === 'resize-right' ? clamp(last + Math.round(deltaSec), first + minimumSpan, 86400) : last;
+  const map = sec => Math.round(newFirst + (sec - first) * (newLast - newFirst) / span);
+  return cues.map(c => {
+    let startSec = map(c.startSec), end = map(c.startSec + c.durationSec);
+    if (c.durationSec && end === startSec) { if (end < newLast) end++; else startSec--; }
+    return { ...c, startSec, durationSec: c.durationSec ? end - startSec : 0 };
+  });
 }
 function portPoint(rect, port, offset = 6) {
   const v = PORTS[port];
@@ -338,6 +372,111 @@ function findAlignmentGuides(project, id, startSec, durationSec, scale, visibleL
 function safeMarkdown(obj) {
   return `# ${obj.name}\n\n> CueFlow 项目文件。可以在代码块外编写说明；代码块内是可编辑的调度数据，请保留 cueflow 标记和有效 JSON。\n\n\`\`\`cueflow\n${JSON.stringify(obj, null, 2)}\n\`\`\`\n\n## 导演备注\n\n`;
 }
+const PROJECT_FILE_FORMAT = 'cueflow.project';
+const MAX_PROJECT_FILE_BYTES = 5 * 1024 * 1024;
+function inspectProject(project) {
+  const byId = new Map(project.cues.map(c => [c.id,c]));
+  return {
+    conflicts: project.cues.filter(c => hasConflict(project,c)).length,
+    dependencyViolations: project.cues.filter(c => c.dependsOn.some(id => c.startSec < byId.get(id).startSec + byId.get(id).durationSec)).length,
+    critical: project.cues.filter(c => c.critical).length
+  };
+}
+function summarizeProjectChanges(before, after) {
+  const old = new Map((before?.cues || []).map(c => [c.id,c])), next = new Map(after.cues.map(c => [c.id,c]));
+  const fields = ['name','laneId','startSec','durationSec','status','note','critical','dependsOn'];
+  const changed = after.cues.filter(c => old.has(c.id) && fields.some(k => JSON.stringify(c[k] ?? null) !== JSON.stringify(old.get(c.id)[k] ?? null))).length;
+  const timing = after.cues.filter(c => old.has(c.id) && (c.startSec !== old.get(c.id).startSec || c.durationSec !== old.get(c.id).durationSec)).length;
+  const deps = p => new Set((p?.cues || []).flatMap(c => c.dependsOn.map(id => JSON.stringify([id,c.id]))));
+  const previousDeps=deps(before), nextDeps=deps(after);
+  const differences = (previous=[], current=[]) => {
+    const oldItems=new Map(previous.map(item=>[item.id,JSON.stringify(item)])),newItems=new Map(current.map(item=>[item.id,JSON.stringify(item)]));
+    return {added:[...newItems.keys()].filter(id=>!oldItems.has(id)).length,removed:[...oldItems.keys()].filter(id=>!newItems.has(id)).length,changed:[...newItems.keys()].filter(id=>oldItems.has(id)&&oldItems.get(id)!==newItems.get(id)).length};
+  };
+  const groups=differences(before?.groups,after.groups),lanes=differences(before?.lanes,after.lanes),relations=differences(before?.relations,after.relations);
+  return {added:after.cues.filter(c=>!old.has(c.id)).length,removed:[...old.keys()].filter(id=>!next.has(id)).length,changed,timing,
+    dependenciesAdded:[...nextDeps].filter(id=>!previousDeps.has(id)).length,dependenciesRemoved:[...previousDeps].filter(id=>!nextDeps.has(id)).length,
+    criticalRemoved:[...old.values()].filter(c=>c.critical && !next.get(c.id)?.critical).length,
+    groupsChanged:groups.added+groups.removed+groups.changed,lanesChanged:lanes.added+lanes.removed+lanes.changed,relations,
+    dependencyLabelsChanged:JSON.stringify(before?.dependencyLabels || [])!==JSON.stringify(after.dependencyLabels || []),
+    beforeDuration:before?.durationSec || 0,afterDuration:after.durationSec,...inspectProject(after)};
+}
+function checkPortableLimits(data) {
+  if ((data.cues?.length || 0) > 3000 || (data.lanes?.length || 0) > 500 || (data.relations?.length || 0) > 10000) throw new Error('项目文件最多支持 3000 个动作、500 条泳道和 10000 条关联');
+}
+function parseProjectBundle(value) {
+  if (typeof value !== 'string') throw new Error('请选择 UTF-8 JSON 或 Markdown 项目文件');
+  const raw = value.replace(/^\uFEFF/,'');let text = raw.trim();
+  let markdownNotes = null, optimizationNotes = [];
+  if (new TextEncoder().encode(raw).byteLength > MAX_PROJECT_FILE_BYTES) throw new Error('项目文件不能超过 5 MB');
+  if (!text) throw new Error('项目文件为空');
+  if (!text.startsWith('{')) {
+    const blocks = [...raw.matchAll(/```cueflow\s*\r?\n([\s\S]*?)\r?\n```/g)];
+    if (blocks.length > 1) throw new Error('文件包含多个 cueflow 数据块，请只保留一个项目');
+    if (blocks.length === 1) {
+      markdownNotes = {before:raw.slice(0,blocks[0].index),after:raw.slice(blocks[0].index+blocks[0][0].length)};
+      text = blocks[0][1];
+    }
+    else {
+      const fenced = text.match(/^```json\s*\r?\n([\s\S]*?)\r?\n```\s*$/i);
+      if (fenced) text = fenced[1]; else throw new Error('未找到完整项目 JSON 或 cueflow 数据块；CSV 不能恢复完整项目');
+    }
+  }
+  let data;
+  try { data = JSON.parse(text); } catch (err) { throw new Error('项目 JSON 格式错误：' + err.message.slice(0,160)); }
+  if (data?.format !== undefined) {
+    if (data.format !== PROJECT_FILE_FORMAT || data.formatVersion !== 1) throw new Error('不支持该项目文件格式或版本');
+    markdownNotes = data.markdownNotes ?? markdownNotes;
+    optimizationNotes = Array.isArray(data.optimizationNotes) ? data.optimizationNotes.filter(note=>typeof note==='string') : typeof data.optimizationNotes === 'string' ? [data.optimizationNotes] : [];
+    data = data.project;
+  }
+  if (markdownNotes !== null && (typeof markdownNotes !== 'object' || typeof markdownNotes.before !== 'string' || typeof markdownNotes.after !== 'string' || /```cueflow\s*\r?\n/.test(markdownNotes.before+markdownNotes.after))) throw new Error('项目备注格式错误，或备注中含有额外 cueflow 数据块');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('项目文件缺少有效 project 数据');
+  checkPortableLimits(data);
+  if(data.groups!==undefined){
+    if(!Array.isArray(data.groups))throw new Error('groups 必须是分组数组');
+    const ids=new Set();for(const group of data.groups){if(!group || typeof group.id!=='string' || !group.id.trim() || ids.has(group.id))throw new Error('分组 ID 无效或重复');ids.add(group.id);}
+    for(const lane of Array.isArray(data.lanes)?data.lanes:[])if(lane?.groupId && !ids.has(lane.groupId))throw new Error('泳道引用了不存在的分组');
+  }
+  for(const cue of Array.isArray(data.cues)?data.cues:[]){
+    if(cue?.critical!==undefined && typeof cue.critical!=='boolean')throw new Error('critical 关键标记必须是 true 或 false');
+    if(cue?.status!==undefined && !['planned','active','done'].includes(cue.status))throw new Error('status 只能是 planned、active 或 done');
+  }
+  return {project:validateProject(data),markdownNotes,optimizationNotes};
+}
+function parseProjectFile(value) { return parseProjectBundle(value).project; }
+function importedProjectMarkdown(project, notes = null) {
+  if (!notes) return safeMarkdown(project);
+  const before = notes.before && !notes.before.endsWith('\n') ? notes.before+'\n' : notes.before;
+  const after = notes.after && !notes.after.startsWith('\n') ? '\n'+notes.after : notes.after;
+  return before+'```cueflow\n'+JSON.stringify(project,null,2)+'\n```'+(after || '\n');
+}
+function buildProjectFile(project, format = 'json', goal = '', markdownNotes = null) {
+  checkPortableLimits(project);
+  const data = validateProject(deepCopy(project));
+  const guide = {
+    goal: String(goal || '在保留全部动作、关键标记和依赖关系的前提下，减少同泳道冲突并优化总时长。').trim(),
+    rules: [
+      '所有时间单位为整数秒，使用相对时间；总时长至少 60 秒，所有动作结束不超过 86400 秒。',
+      '保持动作、泳道、分组和连线的 ID；除非用户明确要求，不删除动作、不取消 critical 关键标记、不更改 dependsOn 依赖。',
+      'dependsOn 为前置动作 ID 数组，语义为前置结束后本动作开始；不得形成循环。',
+      'relations 仅表示关联/目标，fromPort/toPort 为 top 或 bottom；这些箭头不参与排期。',
+      'critical=true 为关键动作，优先保留并说明调整理由；durationSec=0 为里程碑，保持零时长。',
+      '同 laneId 的非零动作尽量不重叠；无法消除的冲突需明确说明，不得虚构资源。',
+      '保留 name、note、status、groups、lanes、relations、dependencyLabels 等完整数据；durationSec 应覆盖所有动作。',
+      'critical 必须为 true/false 布尔值，status 只能是 planned、active 或 done；不要翻译字段名或 ID。',
+      '只修改 project 内的项目数据；返回完整文件，并在 optimizationNotes 数组用中文说明修改、收益及未解决问题。'
+    ],
+    fields: {projectVersion:4,startSec:'相对开始秒数',durationSec:'持续秒数；项目顶层为总时长',laneId:'执行人员/设备泳道 ID',groupId:'泳道分组 ID',critical:'关键动作布尔值',dependsOn:'前置动作 ID 数组',relations:'不参与排期的关联箭头',dependencyLabels:'依赖箭头文字标注'},
+    returnFormat:'返回同结构完整 JSON，或仅包含一个 cueflow 数据块的 Markdown；不要只返回 CSV、片段或修改建议。'
+  };
+  if (format === 'json') return JSON.stringify({format:PROJECT_FILE_FORMAT,formatVersion:1,exportedAt:new Date().toISOString(),aiGuide:guide,project:data,markdownNotes,optimizationNotes:[]},null,2)+'\n';
+  if (format !== 'markdown') throw new Error('不支持的项目导出格式');
+  const human = value => String(value).replace(/\r?\n/g,' ').replace(/`/g,'ˋ').replace(/\|/g,'\\|');
+  const lanes = new Map(data.lanes.map(l=>[l.id,l.name])),names=new Map(data.cues.map(c=>[c.id,c.name]));
+  const table = ['| 动作 | 人员/设备 | 开始 | 持续 | 关键 | 前置动作 |','|---|---|---|---|---|---|',...data.cues.map(c=>'| '+[c.name,lanes.get(c.laneId),fmtTime(c.startSec),fmtTime(c.durationSec),c.critical?'★':'',c.dependsOn.map(id=>names.get(id)).join('、')].map(human).join(' | ')+' |')].join('\n');
+  return '# '+human(data.name)+' · AI 优化项目\n\n## 优化目标\n\n'+human(guide.goal)+'\n\n## 约束与返回要求\n\n'+guide.rules.map(rule=>'- '+rule).join('\n')+'\n\n'+guide.returnFormat+'\n\n## 排程概览\n\n'+table+'\n\n## 完整项目数据\n\n```cueflow\n'+JSON.stringify(data,null,2)+'\n```\n\n## 优化说明\n\n请 AI 在此说明调整结果和仍需人工确认的问题。\n'+(markdownNotes ? '\n## 原项目正文与备注\n\n'+markdownNotes.before+'\n'+markdownNotes.after : '');
+}
 function btn(parent, title, action, cls = '') {
   const el = parent.createEl('button', { text: title, cls: `cueflow-btn ${cls}` });
   el.type = 'button';
@@ -355,6 +494,54 @@ function select(parent, choices, current, cb, title = '') {
   return el;
 }
 
+class ProjectExportModal extends Modal {
+  constructor(view) { super(view.app); this.view=view; this.project=view.project; }
+  onOpen() {
+    const root=this.contentEl;root.empty();root.addClass('cueflow-modal');root.createEl('h3',{text:'导出项目 / 交给 AI 优化'});
+    root.createEl('p',{text:'导出完整动作、泳道、分组、依赖、关联、关键标记和项目备注。可将文件交给 AI，修改后再通过「导入项目」预览并生成新项目。'});
+    let format='json', goal='在保留全部动作、关键标记和依赖关系的前提下，减少同泳道冲突并优化总时长。';
+    new Setting(root).setName('文件格式').addDropdown(d=>d.addOption('json','完整 AI 项目（JSON，推荐）').addOption('markdown','AI 优化文档（Markdown）').setValue(format).onChange(v=>{format=v;}));
+    new Setting(root).setName('优化目标').setDesc('说明需要优化的目标或必须保留的约束，随文件交给 AI。').addTextArea(t=>{t.setValue(goal).onChange(v=>{goal=v;});t.inputEl.rows=4;this.goalInput=t.inputEl;});
+    root.createEl('p',{cls:'cueflow-muted',text:'AI 优化由你使用的 AI 工具完成；导出文件保存在当前知识库中。'});
+    new Setting(root).addButton(b=>b.setButtonText('导出文件').setCta().onClick(async()=>{b.setDisabled(true);if(await this.view.exportProjectFile(format,this.goalInput.value,this.project))this.close();else b.setDisabled(false);})).addButton(b=>b.setButtonText('取消').onClick(()=>this.close()));
+  }
+}
+class ProjectImportModal extends Modal {
+  constructor(view,bundle,filename) { super(view.app);Object.assign(this,{view,bundle,filename,comparison:deepCopy(view.project),autoSchedule:!!view.autoSchedule}); }
+  onOpen() {
+    const root=this.contentEl;root.empty();root.addClass('cueflow-modal');root.createEl('h3',{text:'导入项目预览'});
+    root.createEl('p',{text:this.filename+' · 导入后保存为新项目，保留当前项目。'});
+    new Setting(root).setName('新项目名称').addText(t=>{t.setValue(this.bundle.project.name+'（导入）');this.nameInput=t.inputEl;});
+    new Setting(root).setName('按依赖自动顺延').setDesc('启用后按前置动作的结束时间推后冲突动作，预览同步更新；关闭则保留文件中的原始时间。').addToggle(t=>t.setValue(this.autoSchedule).onChange(v=>{this.autoSchedule=v;this.updatePreview();}));
+    this.preview=root.createDiv({cls:'cueflow-import-preview'});
+    if(this.bundle.optimizationNotes.length){root.createEl('h4',{text:'AI 优化说明'});const list=root.createEl('ul');for(const note of this.bundle.optimizationNotes.slice(0,20))list.createEl('li',{text:note.slice(0,3000)});}
+    new Setting(root).addButton(b=>{this.importButton=b;b.setButtonText('保存为新项目').setCta().onClick(async()=>{const name=this.nameInput.value.trim();if(!name)return new Notice('项目名称不能为空');if(!this.candidate)return; b.setDisabled(true);if(await this.view.importProject(this.candidate,name,this.bundle.markdownNotes,this.bundle.optimizationNotes))this.close();else b.setDisabled(false);});}).addButton(b=>b.setButtonText('取消').onClick(()=>this.close()));
+    this.updatePreview();
+  }
+  updatePreview() {
+    this.preview.empty();this.candidate=null;
+    try {
+      const candidate=validateProject(deepCopy(this.bundle.project));scheduleDependents(candidate,this.autoSchedule);candidate.durationSec=Math.max(candidate.durationSec,latestCueEnd(candidate));
+      this.candidate=candidate;const s=summarizeProjectChanges(this.comparison,candidate);
+      this.preview.createEl('p',{text:`${candidate.groups.length} 个分组 · ${candidate.lanes.length} 条泳道 · ${candidate.cues.length} 个动作 · ${s.critical} 个关键动作 · 总时长 ${fmtTime(candidate.durationSec)}`});
+      this.preview.createEl('p',{text:`相比当前项目：新增 ${s.added}、移除 ${s.removed}、修改 ${s.changed} 个动作，其中 ${s.timing} 个调整了时间；新增 ${s.dependenciesAdded}、移除 ${s.dependenciesRemoved} 条依赖。`});
+      this.preview.createEl('p',{text:`总时长 ${fmtTime(s.beforeDuration)} → ${fmtTime(s.afterDuration)}；分组调整 ${s.groupsChanged}、泳道调整 ${s.lanesChanged}；关联新增 ${s.relations.added}、移除 ${s.relations.removed}、修改 ${s.relations.changed}。${s.dependencyLabelsChanged?'依赖标注也有变化。':''}`});
+      if(s.criticalRemoved)this.preview.createEl('p',{cls:'cueflow-import-warning',text:`有 ${s.criticalRemoved} 个原关键动作被移除或取消关键标记，请核对 AI 修改。`});
+      if(s.conflicts || s.dependencyViolations)this.preview.createEl('p',{cls:'cueflow-import-warning',text:`需复核：${s.conflicts} 个动作有同泳道时间重叠，${s.dependencyViolations} 个动作早于前置动作结束。`});
+      else this.preview.createEl('p',{text:'未发现同泳道重叠或前置时间冲突。'});
+      this.importButton?.setDisabled(false);
+    }catch(err){this.preview.createEl('p',{cls:'cueflow-import-warning',text:err.message});this.importButton?.setDisabled(true);}
+  }
+}
+class ProjectPasteModal extends Modal {
+  constructor(view){super(view.app);this.view=view;}
+  onOpen(){
+    const root=this.contentEl;root.empty();root.addClass('cueflow-modal');root.createEl('h3',{text:'粘贴 AI 返回的项目'});
+    root.createEl('p',{text:'粘贴完整 JSON 或包含一个 cueflow 数据块的 Markdown，下一步预览导入变化。'});
+    const input=root.createEl('textarea',{cls:'cueflow-project-paste',attr:{'aria-label':'完整项目内容',placeholder:'粘贴完整项目 JSON 或 Markdown'}});input.rows=14;
+    new Setting(root).addButton(b=>b.setButtonText('预览导入').setCta().onClick(()=>{try{const bundle=parseProjectBundle(input.value);this.close();new ProjectImportModal(this.view,bundle,'粘贴的 AI 项目').open();}catch(err){new Notice('无法导入项目：'+err.message,10000);}})).addButton(b=>b.setButtonText('取消').onClick(()=>this.close()));
+  }
+}
 class StringModal extends Modal {
   constructor(app, title, label, initial, onSave, allowEmpty = false) { super(app); Object.assign(this, { titleText: title, label, initial, onSave, allowEmpty }); }
   onOpen() {
@@ -431,6 +618,7 @@ class CueModal extends Modal {
       .addText(t => { fields.duration = t.inputEl; t.setValue(fmtTime(d.durationSec)); });
     new Setting(contentEl).setName('执行状态').addDropdown(dd => { fields.status = dd.selectEl;
       dd.addOption('planned', '待执行').addOption('active', '进行中').addOption('done', '已完成').setValue(d.status); });
+    new Setting(contentEl).setName('关键动作').setDesc('显示星标，便于识别需要重点关注的动作。').addToggle(t => { fields.critical = t.toggleEl; t.setValue(!!d.critical); t.onChange(value => { d.critical = value; }); });
     new Setting(contentEl).setName('操作备注').addTextArea(t => { fields.note = t.inputEl;
       t.setPlaceholder('动作、口令、设备、注意事项等').setValue(d.note); t.inputEl.rows = 4; });
     contentEl.createEl('h4', { text: '前置动作（可多选，结束后才允许本任务开始）' });
@@ -589,7 +777,7 @@ class CueFlowView extends ItemView {
     this.density = plugin.settings.laneDensity || 'standard';
     this.railWidth = clamp(positive(plugin.settings.labelWidth, LABEL_WIDTH), 160, 600);
     this.history = []; this.historyIndex = -1;
-    this.selectedId = null; this.pendingLinkId = null;
+    this.selectedId = null; this.selectedIds = new Set(); this.pendingLinkId = null;
     this.elapsed = 0; this.running = false; this.tickHandle = null;
     this.timerOrigin = 0; this.timerBase = 0;
     this.saveChain = Promise.resolve(); this.saveTimer = null;
@@ -604,8 +792,9 @@ class CueFlowView extends ItemView {
     this.contentEl.addClass('cueflow-root');
     if (!this.canvasClickHandler) {
       this.canvasClickHandler = event => {
+        if (this.swallowGestureClick(event)) return;
         const target = event.target;
-        if (target?.closest && this.contentEl.contains(target) && target.closest('.cueflow-cue,.cueflow-link-hit')) return;
+        if (target?.closest && this.contentEl.contains(target) && target.closest('.cueflow-cue,.cueflow-link-hit,.cueflow-selection-handle')) return;
         this.clearCanvasSelection();
       };
       this.canvasBlurHandler = () => this.clearCanvasSelection();
@@ -646,7 +835,7 @@ class CueFlowView extends ItemView {
       const base = filenameFor(name);
       let path = `${folder}/${base}.md`, i = 2;
       while (this.app.vault.getAbstractFileByPath(path)) path = `${folder}/${base}-${i++}.md`;
-      const proj = example ? makeExample() : { version: 3, relations: [], dependencyLabels: [], name, durationSec: 1200, groups: deepCopy(DEFAULT_GROUPS),
+      const proj = example ? makeExample() : { version: 4, relations: [], dependencyLabels: [], name, durationSec: 1200, groups: deepCopy(DEFAULT_GROUPS),
         lanes: LANES.map(([n, color, groupId]) => ({ id: uid('lane'), name: n, color, groupId })), cues: [] };
       proj.name = name;
       const file = await this.app.vault.create(path, safeMarkdown(proj));
@@ -664,7 +853,7 @@ class CueFlowView extends ItemView {
       const raw = await this.app.vault.read(file), match = raw.match(BLOCK_RE);
       if (!match) throw new Error('没有找到 ```cueflow 数据块');
       const project = validateProject(JSON.parse(match[1]));
-      this.file = file; this.project = project; this.selectedId = null; this.selectedConnectionId = null; this.pendingLinkId = null;
+      this.pointerCleanup?.(); this.file = file; this.project = project; this.selectedId = null; this.selectedIds = new Set(); this.selectedConnectionId = null; this.pendingLinkId = null;
       this.savedBlocks.set(file.path, match[0]); this.dirty = false; this.saveError = '';
       this.collapsedGroups = new Set();
       this.pauseClock(); this.elapsed = 0; this.history = [JSON.stringify(this.project)]; this.historyIndex = 0;
@@ -682,10 +871,12 @@ class CueFlowView extends ItemView {
   }
   undo() {
     if (this.historyIndex <= 0) return;
+    this.pointerCleanup?.();
     this.historyIndex--; this.project = JSON.parse(this.history[this.historyIndex]); this.queueSave(); this.render(true);
   }
   redo() {
     if (this.historyIndex >= this.history.length - 1) return;
+    this.pointerCleanup?.();
     this.historyIndex++; this.project = JSON.parse(this.history[this.historyIndex]); this.queueSave(); this.render(true);
   }
   queueSave() {
@@ -748,21 +939,44 @@ class CueFlowView extends ItemView {
       const existing = new Map(this.project.cues.map(c => [c.id, c]));
       this.project.cues = candidate.cues.map(c => existing.has(c.id) ? Object.assign(existing.get(c.id), c) : c);
       this.project.durationSec = candidate.durationSec; this.project.version = candidate.version; this.project.relations = candidate.relations; this.project.dependencyLabels = candidate.dependencyLabels;
-      this.selectedConnectionId = null; this.selectedId = draft.id; this.recordChange(); return true;
+      this.selectedConnectionId = null; this.selectedId = draft.id; this.selectedIds = new Set([draft.id]); this.recordChange(); return true;
     } catch (err) { new Notice(err.message); return false; }
   }
-  deleteCue(id, confirm = true) {
-    const cue = this.project.cues.find(c => c.id === id); if (!cue) return;
-    if (confirm && !window.confirm(`删除动作「${cue.name}」？`)) return;
+  saveCueBatch(drafts, lockTiming = false) {
+    try {
+      const byId = new Map(drafts.map(cue => [cue.id, deepCopy(cue)]));
+      if (!byId.size || [...byId.keys()].some(id => !this.project.cues.some(c => c.id === id))) return false;
+      const candidate = deepCopy(this.project); candidate.cues = candidate.cues.map(c => byId.get(c.id) || c);
+      validateProject(candidate); scheduleDependents(candidate, this.autoSchedule);
+      if (lockTiming && candidate.cues.some(c => byId.has(c.id) && c.startSec !== byId.get(c.id).startSec)) throw new Error('依赖限制了整体调整，请一并选中相关前置/中间动作，或关闭依赖顺延后再调整');
+      candidate.durationSec = Math.max(candidate.durationSec, latestCueEnd(candidate));
+      if (JSON.stringify(candidate) === JSON.stringify(this.project)) return true;
+      const existing = new Map(this.project.cues.map(c => [c.id, c]));
+      this.project.cues = candidate.cues.map(c => Object.assign(existing.get(c.id), c));
+      this.project.durationSec = candidate.durationSec; this.project.version = candidate.version;
+      this.recordChange(); return true;
+    } catch (err) { new Notice(err.message); return false; }
+  }
+  setSelectionCritical(value) {
+    const ids = this.getSelectedCueIds(), cues = this.project.cues.filter(c => ids.has(c.id));
+    if (!cues.length) return false;
+    const next = value === undefined ? !cues.every(c => c.critical) : !!value;
+    if (cues.every(c => !!c.critical === next)) return true;
+    cues.forEach(c => { c.critical = next; }); this.project.version = 4; this.recordChange(); return true;
+  }
+  deleteCue(id, confirm = true) { return this.deleteCues([id], confirm); }
+  deleteCues(ids, confirm = true) {
+    const chosen = new Set(ids), cues = this.project.cues.filter(c => chosen.has(c.id)); if (!cues.length) return;
+    if (confirm && !window.confirm(cues.length === 1 ? `删除动作「${cues[0].name}」？` : `删除选中的 ${cues.length} 个动作？`)) return;
     this.pointerCleanup?.();
-    if (this.inlineEdit?.id === id) this.inlineEdit.finish(false);
-    if (this.pendingLinkId === id) this.pendingLinkId = null;
-    this.project.cues = this.project.cues.filter(c => c.id !== id);
-    this.project.relations = (this.project.relations || []).filter(edge => edge.from !== id && edge.to !== id);
-    this.project.dependencyLabels = (this.project.dependencyLabels || []).filter(edge => edge.from !== id && edge.to !== id);
+    if (chosen.has(this.inlineEdit?.id)) this.inlineEdit.finish(false);
+    if (chosen.has(this.pendingLinkId)) this.pendingLinkId = null;
+    this.project.cues = this.project.cues.filter(c => !chosen.has(c.id));
+    this.project.relations = (this.project.relations || []).filter(edge => !chosen.has(edge.from) && !chosen.has(edge.to));
+    this.project.dependencyLabels = (this.project.dependencyLabels || []).filter(edge => !chosen.has(edge.from) && !chosen.has(edge.to));
     this.selectedConnectionId = null;
-    for (const c of this.project.cues) c.dependsOn = c.dependsOn.filter(d => d !== id);
-    this.selectedId = null; this.recordChange();
+    for (const c of this.project.cues) c.dependsOn = c.dependsOn.filter(d => !chosen.has(d));
+    this.selectedId = null; this.selectedIds = new Set(); this.recordChange();
   }
   addCue(laneId, startSec = 0, durationSec = 60) {
     const cue = { id: uid('cue'), name: '新动作', laneId, startSec: Math.round(startSec), durationSec: Math.round(durationSec), note: '', dependsOn: [], status: 'planned' };
@@ -785,6 +999,7 @@ class CueFlowView extends ItemView {
   }
   beginInlineCueName(id) {
     this.inlineEdit?.finish(true, true);
+    this.selectCue(id);
     const project = this.project, cue = project.cues.find(item => item.id === id);
     const el = [...this.board.querySelectorAll('.cueflow-cue')].find(node => node.dataset.id === id);
     if (!cue || !el) return;
@@ -820,9 +1035,10 @@ class CueFlowView extends ItemView {
     if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.target?.closest?.('input,textarea,select,button,[role="button"],[role="separator"],[contenteditable]:not([contenteditable="false"])')) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); return; }
-    if (e.key === 'Escape' && this.pendingLinkId) { e.preventDefault(); this.pendingLinkId = null; this.render(true); return; }
+    if (e.key === 'Escape') { e.preventDefault(); this.clearCanvasSelection(); return; }
+    if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); this.selectCues(this.project.cues.filter(c => this.laneLayout.laneY.has(c.laneId)).map(c => c.id)); return; }
     if (!mod && !e.altKey && e.key === 'Delete') {
-      if (this.selectedId) { e.preventDefault(); this.deleteCue(this.selectedId, false); }
+      if (this.selectedId) { e.preventDefault(); this.deleteCues(this.getSelectedCueIds(), false); }
       else if (this.selectedConnectionId) { e.preventDefault(); this.removeConnection(this.selectedConnectionId); }
     }
   }
@@ -849,7 +1065,7 @@ class CueFlowView extends ItemView {
       return this.saveCue(target);
     }
     const relation = { id: uid('relation'), from: edge.from, to: edge.to, fromPort, toPort, label: '' };
-    this.project.relations = [...(this.project.relations || []), relation]; this.selectedId = null; this.selectedConnectionId = relation.id;
+    this.project.relations = [...(this.project.relations || []), relation]; this.selectedId = null; this.selectedIds = new Set(); this.selectedConnectionId = relation.id;
     this.recordChange(); return true;
   }
   removeConnection(id) {
@@ -868,7 +1084,7 @@ class CueFlowView extends ItemView {
       this.project.dependencyLabels = (this.project.dependencyLabels || []).filter(item => item.from !== edge.from || item.to !== edge.to);
       if (label) this.project.dependencyLabels.push({ from: edge.from, to: edge.to, label });
     } else this.project.relations.find(item => item.id === id).label = label;
-    this.selectedId = null; this.selectedConnectionId = id; this.recordChange(); return true;
+    this.selectedId = null; this.selectedIds = new Set(); this.selectedConnectionId = id; this.recordChange(); return true;
   }
   editConnection(id) {
     const edge = projectConnections(this.project).find(item => item.id === id); if (!edge) return;
@@ -879,18 +1095,19 @@ class CueFlowView extends ItemView {
   }
   clearCanvasSelection() {
     this.pointerCleanup?.(); this.inlineEdit?.finish(true, true);
-    this.selectedId = null; this.selectedConnectionId = null; this.pendingLinkId = null;
+    this.selectedId = null; this.selectedIds = new Set(); this.selectedConnectionId = null; this.pendingLinkId = null;
     this.board?.querySelectorAll('.cueflow-selected,.cueflow-connection-target,.cueflow-connection-invalid').forEach(el => el.classList.remove('cueflow-selected', 'cueflow-connection-target', 'cueflow-connection-invalid'));
-    this.updateConnectionFocus(); if (this.project) this.renderFooter();
+    this.updateConnectionFocus(); this.renderSelectionBox(); if (this.project) this.renderFooter();
   }
   selectConnection(id) {
-    this.inlineEdit?.finish(true, true); this.selectedId = null; this.selectedConnectionId = id;
+    this.inlineEdit?.finish(true, true); this.selectedId = null; this.selectedIds = new Set(); this.selectedConnectionId = id;
     this.board.querySelectorAll('.cueflow-cue').forEach(el => el.classList.remove('cueflow-selected'));
-    this.scroller.focus({ preventScroll: true }); this.updateConnectionFocus(); this.renderFooter();
+    this.scroller.focus({ preventScroll: true }); this.updateConnectionFocus(); this.renderSelectionBox(); this.renderFooter();
   }
   updateConnectionFocus() {
+    const selected = this.getSelectedCueIds();
     this.rowsEl?.querySelectorAll('.cueflow-connection').forEach(el => {
-      const focus = el.dataset.id === this.selectedConnectionId || (!!this.selectedId && (el.dataset.from === this.selectedId || el.dataset.to === this.selectedId));
+      const focus = el.dataset.id === this.selectedConnectionId || selected.has(el.dataset.from) || selected.has(el.dataset.to);
       el.classList.toggle('cueflow-link-focused', focus);
       el.classList.toggle('cueflow-link-dimmed', !!(this.selectedId || this.selectedConnectionId) && !focus);
     });
@@ -1204,12 +1421,65 @@ class CueFlowView extends ItemView {
   getProjectFolder() {
     return this.file?.path.includes('/') ? this.file.path.slice(0, this.file.path.lastIndexOf('/')) : this.plugin.settings.folder;
   }
+  openProjectFiles(event) {
+    const menu=new Menu();
+    menu.addItem(i=>i.setTitle('导入项目文件（JSON / Markdown）').setIcon('file-up').onClick(()=>this.chooseProjectFile()));
+    menu.addItem(i=>i.setTitle('粘贴 AI 返回的项目').setIcon('clipboard-paste').onClick(()=>new ProjectPasteModal(this).open()));
+    menu.addItem(i=>i.setTitle('导出完整项目 / AI 优化文件').setIcon('file-down').onClick(()=>new ProjectExportModal(this).open()));
+    menu.showAtMouseEvent(event);
+  }
+  chooseProjectFile() {
+    const input=document.createElement('input');input.type='file';input.accept='.json,.md,.markdown';input.style.display='none';document.body.append(input);
+    input.addEventListener('cancel',()=>input.remove(),{once:true});
+    input.addEventListener('change',async()=>{
+      const file=input.files?.[0];input.remove();if(!file)return;
+      try{if(file.size>MAX_PROJECT_FILE_BYTES)throw new Error('项目文件不能超过 5 MB');this.previewProjectImport(await file.text(),file.name);}
+      catch(err){new Notice('读取项目文件失败：'+err.message);}
+    },{once:true});input.click();
+  }
+  previewProjectImport(text,filename='项目文件') {
+    try {const bundle=parseProjectBundle(text);new ProjectImportModal(this,bundle,filename).open();return true;}
+    catch(err){new Notice('无法导入项目：'+err.message,10000);return false;}
+  }
+  async importProject(project,name,markdownNotes=null,optimizationNotes=[]) {
+    try {
+      const candidate=validateProject(deepCopy(project));candidate.name=String(name || '').trim();if(!candidate.name)throw new Error('项目名称不能为空');
+      const active=this.project;
+      this.inlineEdit?.finish(true,true);this.pointerCleanup?.();
+      if(this.dirty && !(await this.saveNow()))return false;
+      await this.ensureFolder();
+      if(this.project!==active)throw new Error('当前项目已切换，请重新导入');
+      const folder=this.plugin.settings.folder,base=folder+'/'+filenameFor(candidate.name);let path=base+'.md',index=2;
+      while(this.app.vault.getAbstractFileByPath(path))path=base+'-'+(index++)+'.md';
+      let content=importedProjectMarkdown(candidate,markdownNotes);
+      if(optimizationNotes.length)content+='\n\n## AI 优化说明\n\n'+optimizationNotes.filter(note=>typeof note==='string').map(note=>'- '+note.replace(/`/g,'ˋ').replace(/\r?\n/g,'\n  ')).join('\n')+'\n';
+      const file=await this.app.vault.create(path,content);
+      await this.refreshFiles();
+      const opened=this.project===active && await this.openFile(file);
+      new Notice(opened?'项目已导入并保存为新项目':'项目已保存为 '+path+'，可在项目列表打开');return file;
+    }catch(err){new Notice('导入项目失败：'+err.message,10000);return false;}
+  }
+  async exportProjectFile(format='json',goal='',expectedProject=this.project) {
+    try {
+      if(this.project!==expectedProject)throw new Error('项目已切换，请重新打开导出窗口');
+      const snapshot=deepCopy(expectedProject),source=this.file,folder=this.getProjectFolder();let notes=null;
+      if(source){const raw=await this.app.vault.read(source),bundle=parseProjectBundle(raw);notes=bundle.markdownNotes;}
+      if(this.project!==expectedProject)throw new Error('项目已切换，请重新导出');
+      const content=buildProjectFile(snapshot,format,goal,notes);
+      if(new TextEncoder().encode(content).byteLength>MAX_PROJECT_FILE_BYTES)throw new Error('导出文件超过 5 MB，请减少项目备注或拆分项目');
+      const base=folder+'/'+filenameFor(snapshot.name)+'-AI项目',ext=format==='json'?'.cueflow.json':'.md';let path=base+ext,index=2;
+      while(this.app.vault.getAbstractFileByPath(path))path=base+'-'+(index++)+ext;
+      const file=await this.app.vault.create(path,content);new Notice('已导出 '+path+'；可交给 AI 优化，再导入返回的完整文件。');return file;
+    }catch(err){new Notice('项目导出失败：'+err.message,10000);return false;}
+  }
   async exportCSV() {
     try {
-      const csv = [['分组', '角色/设备', '动作', '开始(秒)', '结束(秒)', '持续(秒)', '状态', '前置动作', '备注', '关联/目标', '连线标注']];
+      const csv = [['分组', '角色/设备', '动作', '开始(秒)', '结束(秒)', '持续(秒)', '状态', '前置动作', '备注', '关联/目标', '连线标注', '关键动作']];
       const byId = new Map(this.project.cues.map(c => [c.id, c.name]));
       const laneMap = new Map(this.project.lanes.map(l => [l.id, l]));
       for (const c of [...this.project.cues].sort((a, b) => a.startSec - b.startSec)) csv.push([laneGroupName(this.project, laneMap.get(c.laneId)), laneMap.get(c.laneId)?.name, c.name, c.startSec, c.startSec + c.durationSec, c.durationSec, c.status, c.dependsOn.map(id => byId.get(id) || id).join('; '), c.note, (this.project.relations || []).filter(edge => edge.from === c.id || edge.to === c.id).map(edge => (edge.from === c.id ? '→ ' + byId.get(edge.to) : '← ' + byId.get(edge.from)) + (edge.label ? '：' + edge.label : '')).join('; '), projectConnections(this.project).filter(edge => edge.from === c.id && edge.label).map(edge => (edge.kind === 'dependency' ? '依赖 → ' : '关联 → ') + byId.get(edge.to) + '：' + edge.label).join('; ')]);
+      const exportedCues = [...this.project.cues].sort((a,b) => a.startSec-b.startSec);
+      csv.slice(1).forEach((row,index) => row.push(exportedCues[index].critical ? '是' : '否'));
       const escape = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
       const content = '\ufeff' + csv.map(row => row.map(escape).join(',')).join('\r\n');
       const base = `${this.getProjectFolder()}/${filenameFor(this.project.name)}-调度表`;
@@ -1265,6 +1535,7 @@ class CueFlowView extends ItemView {
           fragments.push(`<rect x="${x}" y="${y}" width="${bw}" height="30" rx="5" fill="${lane.color}" opacity=".86"/>`,
             `<text x="${x+6}" y="${y+19}" font-size="12" font-family="sans-serif" fill="#fff">${xmlEscape(c.name.length > Math.max(4,Math.floor(bw/13)) ? c.name.slice(0,Math.max(3,Math.floor(bw/13))-1)+'…' : c.name)}</text>`);
         }
+        if (c.critical) fragments.push(`<text x="${x+3}" y="${y-2}" font-size="14" font-family="sans-serif" fill="#9a6700" stroke="#fff" stroke-width="3" paint-order="stroke"><title>关键动作</title>★</text>`);
         fragments.push('</g>');
       }
       const boxes = connectionRects(this.project, layout, scale, 30, 23);
@@ -1292,8 +1563,10 @@ class CueFlowView extends ItemView {
   }
   render(preserveScroll = false) {
     if (!this.project) return;
+    this.pointerCleanup?.();
     this.inlineEdit?.finish(true, true);
     if (this.selectedId && !this.project.cues.some(cue => cue.id === this.selectedId)) this.selectedId = null;
+    this.selectedIds = this.getSelectedCueIds();
     if (this.selectedConnectionId && !projectConnections(this.project).some(edge => edge.id === this.selectedConnectionId)) this.selectedConnectionId = null;
     const prev = this.scroller, x = preserveScroll ? prev?.scrollLeft || 0 : 0, y = preserveScroll ? prev?.scrollTop || 0 : 0;
     const focused = document.activeElement === this.scroller;
@@ -1333,11 +1606,12 @@ class CueFlowView extends ItemView {
     btn(second, this.autoSchedule ? '依赖顺延 ✓' : '手动排期', () => { this.autoSchedule = !this.autoSchedule; this.plugin.settings.autoSchedule = this.autoSchedule; void this.plugin.saveSettings(); this.render(true); }, 'cueflow-small');
     btn(second, '导出 CSV', () => this.exportCSV(), 'cueflow-small');
     btn(second, '导出 SVG', () => this.exportSVG(), 'cueflow-small');
+    btn(second, '导入 / 导出', e => this.openProjectFiles(e), 'cueflow-small');
     const clock = root.createDiv({ cls: 'cueflow-clockbar' });
     this.clockText = clock.createEl('strong', { text: `T+${fmtTime(this.elapsed)}`, cls: 'cueflow-clock' });
     this.playBtn = btn(clock, this.running ? 'Ⅱ 暂停' : '▶ 排练', () => this.toggleClock(), 'cueflow-primary');
     btn(clock, '↺ 归零', () => this.resetClock());
-    clock.createSpan({ text: this.pendingLinkId ? '连接模式：点击后续动作建立依赖，按 Esc 取消' : '单击选中 · 双击动作改标题 · 右键编辑详情 · 拖节点画箭头 · 双击空白新建 · Delete 删除', cls: 'cueflow-help' });
+    clock.createSpan({ text: '空白拖框多选 · Ctrl/Shift 加选 · 拖动选中动作整体移动 · 选框两端拉伸 · ★ 关键动作 · 双击改标题', cls: 'cueflow-help' });
     const legend = clock.createSpan({ cls: 'cueflow-link-legend' });
     legend.createSpan({ cls: 'cueflow-legend-dependency', text: '实线 → 依赖' }); legend.createSpan({ cls: 'cueflow-legend-relation', text: '虚线 ⇢ 关联 / 目标' });
     const scroll = root.createDiv({ cls: 'cueflow-scroller', attr: { tabindex: '0', 'aria-label': 'CueFlow 调度时间轴' } });
@@ -1370,6 +1644,8 @@ class CueFlowView extends ItemView {
     this.rulerPlayhead = ruler.createDiv({ cls: 'cueflow-ruler-now' });
     const rows = board.createDiv({ cls: 'cueflow-rows' }); this.rowsEl = rows;
     const layout = buildLaneLayout(this.project, this.collapsedGroups, this.rowHeight, this.groupHeight); this.laneLayout = layout;
+    this.selectedIds = new Set([...this.selectedIds].filter(id => layout.laneY.has(this.project.cues.find(c => c.id === id)?.laneId)));
+    if (!this.selectedIds.has(this.selectedId)) this.selectedId = this.selectedIds.values().next().value || null;
     rows.style.minHeight = layout.height + 'px';
     for (const item of layout.rows) {
       if (item.kind === 'group') {
@@ -1427,12 +1703,14 @@ class CueFlowView extends ItemView {
     svg.setAttribute('viewBox', `0 0 ${width} ${Math.max(1, layout.height)}`);
     svg.setAttribute('aria-hidden', 'true'); rows.appendChild(svg);
     this.drawLinks(svg);
+    this.renderSelectionBox();
     this.playhead = board.createDiv({ cls: 'cueflow-playhead' });
     this.playhead.style.height = `${HEADER_HEIGHT + layout.height}px`;
     this.footerEl = root.createDiv({ cls: 'cueflow-footer' }); this.renderFooter();
     scroll.scrollLeft = x; scroll.scrollTop = y;
     if (focused) scroll.focus({ preventScroll: true });
     scroll.addEventListener('keydown', e => this.handleCanvasKeydown(e));
+    scroll.addEventListener('pointerdown', e => this.beginMarquee(e));
     scroll.addEventListener('wheel', e => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault(); this.setZoom(e.deltaY < 0 ? 1 : -1);
@@ -1441,11 +1719,19 @@ class CueFlowView extends ItemView {
   }
   renderFooter() {
     const footer = this.footerEl; if (!footer) return; footer.empty();
+    const selected = this.getSelectedCueIds(), selectedCues = this.project.cues.filter(c => selected.has(c.id));
     const current = this.project.cues.find(c => c.id === this.selectedId);
-    if (current) {
+    if (selectedCues.length > 1) {
+      const start = Math.min(...selectedCues.map(c => c.startSec)), end = Math.max(...selectedCues.map(c => c.startSec + c.durationSec));
+      footer.createEl('strong', { text: '已选中 ' + selectedCues.length + ' 个动作' });
+      footer.createSpan({ text: `T+${fmtTime(start)} – ${fmtTime(end)} · 拖动作整体移动，拖选框两端等比例拉伸` });
+      btn(footer, selectedCues.every(c => c.critical) ? '★ 取消关键标记' : '☆ 标为关键动作', e => { e.stopPropagation(); this.setSelectionCritical(); });
+      btn(footer, '删除所选', () => this.deleteCues(selected));
+    } else if (current) {
       footer.createEl('strong', { text: current.name });
       footer.createSpan({ text: `T+${fmtTime(current.startSec)} – ${fmtTime(current.startSec + current.durationSec)} · ${fmtTime(current.durationSec)} · ${this.project.lanes.find(l => l.id === current.laneId)?.name || ''}` });
       btn(footer, '编辑详情', () => new CueModal(this, current).open());
+      btn(footer, current.critical ? '★ 取消关键标记' : '☆ 标为关键动作', e => { e.stopPropagation(); this.setSelectionCritical(); });
       btn(footer, '删除', () => this.deleteCue(current.id));
     } else if (this.selectedConnectionId && projectConnections(this.project).some(edge => edge.id === this.selectedConnectionId)) {
       const edge = projectConnections(this.project).find(item => item.id === this.selectedConnectionId);
@@ -1454,7 +1740,7 @@ class CueFlowView extends ItemView {
       if (edge.label) footer.createSpan({ text: edge.label });
       btn(footer, '文字标注', () => this.editConnection(edge.id));
       btn(footer, '删除连线', () => this.removeConnection(edge.id));
-    } else footer.createSpan({ text: '提示：点击空白取消选中；双击动作改标题，右键编辑详情；Ctrl+Z 撤销，Ctrl+Shift+Z 重做；任务重叠会显示红色虚线边框。' });
+    } else footer.createSpan({ text: '提示：空白拖框多选，Ctrl/Shift 加选；点击空白或 Esc 取消选中；双击改标题，右键编辑详情；Ctrl+Z 撤销。' });
     this.saveStatusEl = footer.createSpan({ cls: 'cueflow-save-status' });
     this.recoveryActions = footer.createSpan({ cls: 'cueflow-recovery-actions' });
     btn(this.recoveryActions, '重试保存', () => this.saveNow(), 'cueflow-small');
@@ -1464,10 +1750,116 @@ class CueFlowView extends ItemView {
     }, 'cueflow-small');
     this.updateSaveStatus();
   }
-  selectCue(id) {
-    this.selectedId = id; this.selectedConnectionId = null;
-    this.board.querySelectorAll('.cueflow-cue').forEach(el => el.classList.toggle('cueflow-selected', el.dataset.id === id));
-    this.updateConnectionFocus(); this.renderFooter();
+  getSelectedCueIds() {
+    if (!this.selectedId || !this.project) return new Set();
+    const ids = new Set(this.selectedIds || []); ids.add(this.selectedId);
+    return new Set([...ids].filter(id => this.project.cues.some(c => c.id === id)));
+  }
+  selectCue(id, mode = 'replace') {
+    const ids = mode === 'replace' ? new Set() : this.getSelectedCueIds();
+    if (mode === 'toggle' && ids.has(id)) ids.delete(id); else ids.add(id);
+    this.selectCues(ids, ids.has(id) ? id : null);
+  }
+  selectCues(ids, primary = null) {
+    this.selectedIds = new Set([...ids].filter(id => this.project.cues.some(c => c.id === id)));
+    this.selectedId = this.selectedIds.has(primary) ? primary : this.selectedIds.values().next().value || null;
+    this.selectedConnectionId = null;
+    this.board?.querySelectorAll('.cueflow-cue').forEach(el => el.classList.toggle('cueflow-selected', this.selectedIds.has(el.dataset.id)));
+    this.updateConnectionFocus(); this.renderSelectionBox(); this.renderFooter();
+  }
+  swallowGestureClick(event) {
+    const last = this.gestureClick; this.gestureClick = null;
+    return !!last && Date.now() < last.until && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 6;
+  }
+  renderSelectionBox(override = null) {
+    this.rowsEl?.querySelector('.cueflow-selection-box')?.remove();
+    const selected = this.getSelectedCueIds(); if (selected.size < 2 || !this.rowsEl) return;
+    const boxes = [...this.getConnectionRects(override)].filter(([id]) => selected.has(id)).map(([, box]) => box);
+    if (boxes.length < 2) return;
+    const left = Math.min(...boxes.map(b => b.x)), right = Math.max(...boxes.map(b => b.x + b.w));
+    const top = Math.min(...boxes.map(b => b.y)), bottom = Math.max(...boxes.map(b => b.y + b.h));
+    const box = this.rowsEl.createDiv({ cls: 'cueflow-selection-box' });
+    box.style.cssText = `left:${this.labelWidth + left - 5}px;top:${top - 5}px;width:${right-left+10}px;height:${bottom-top+10}px`;
+    box.createSpan({ cls: 'cueflow-selection-count', text: selected.size + ' 个动作' });
+    const span = this.project.cues.filter(c => selected.has(c.id));
+    if (Math.max(...span.map(c => c.startSec+c.durationSec)) <= Math.min(...span.map(c => c.startSec))) return;
+    for (const side of ['left', 'right']) {
+      const handle = box.createSpan({ cls: 'cueflow-selection-handle cueflow-selection-' + side, attr: { role:'button', tabindex:'-1', title:'拖动整体' + (side === 'left' ? '起点' : '终点') + '，等比例拉伸所选动作', 'aria-label':'整体拉伸' + (side === 'left' ? '起点' : '终点') } });
+      handle.addEventListener('pointerdown', e => this.beginMultiMove(e, 'resize-' + side));
+      handle.addEventListener('click', e => { e.stopPropagation(); this.swallowGestureClick(e); });
+      handle.addEventListener('dblclick', e => { e.preventDefault(); e.stopPropagation(); });
+    }
+  }
+  startCanvasAutoScroll(point, update) {
+    const timer = window.setInterval(() => {
+      const p = point(); if (!p) return;
+      const r = this.scroller.getBoundingClientRect(), oldX = this.scroller.scrollLeft, oldY = this.scroller.scrollTop;
+      if (p.clientX > r.right - 28) this.scroller.scrollLeft += 18;
+      else if (p.clientX < r.left + this.labelWidth + 28) this.scroller.scrollLeft -= 18;
+      if (p.clientY > r.bottom - 28) this.scroller.scrollTop += 14;
+      else if (p.clientY < r.top + HEADER_HEIGHT + 28) this.scroller.scrollTop -= 14;
+      if (oldX !== this.scroller.scrollLeft || oldY !== this.scroller.scrollTop) update(p);
+    }, 40);
+    return () => window.clearInterval(timer);
+  }
+  beginMarquee(event) {
+    if (event.button !== 0 || event.target?.closest?.('.cueflow-cue,.cueflow-link-hit,.cueflow-selection-handle,button,input,select,.cueflow-lane-label,.cueflow-group-label,.cueflow-heading')) return;
+    const rect = this.rowsEl.getBoundingClientRect();
+    if (event.clientX < this.scroller.getBoundingClientRect().left + this.labelWidth || event.clientY < rect.top) return;
+    event.preventDefault(); event.stopPropagation(); this.inlineEdit?.finish(true, true); this.pointerCleanup?.(); this.scroller.focus({preventScroll:true});
+    const initial = this.getSelectedCueIds(), additive = event.ctrlKey || event.metaKey || event.shiftKey;
+    const point = e => { const r = this.rowsEl.getBoundingClientRect(); return { x:clamp(e.clientX-r.left-this.labelWidth,0,this.timelineWidth), y:clamp(e.clientY-r.top,0,this.laneLayout.height) }; };
+    const start = point(event), boxes = this.getConnectionRects(); let moved = false, frame = null, last = null;
+    const move = e => {
+      if (!moved && Math.hypot(e.clientX-event.clientX,e.clientY-event.clientY) < 4) return;
+      moved = true; last = {clientX:e.clientX,clientY:e.clientY};
+      if (!frame) frame = this.rowsEl.createDiv({cls:'cueflow-marquee',attr:{'aria-hidden':'true'}});
+      const end = point(e), area = {left:Math.min(start.x,end.x),right:Math.max(start.x,end.x),top:Math.min(start.y,end.y),bottom:Math.max(start.y,end.y)};
+      frame.style.cssText = `left:${this.labelWidth+area.left}px;top:${area.top}px;width:${area.right-area.left}px;height:${area.bottom-area.top}px`;
+      this.selectCues([...(additive ? initial : []),...cuesInMarquee(boxes,area)]);
+    };
+    const stopScroll = this.startCanvasAutoScroll(() => last, move);
+    const cleanup = () => { stopScroll(); window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',end); window.removeEventListener('pointercancel',cancel); window.removeEventListener('keydown',key); frame?.remove(); this.pointerCleanup = null; };
+    const end = e => { cleanup(); if (moved) this.gestureClick = {x:e.clientX,y:e.clientY,until:Date.now()+350}; };
+    const cancel = () => { cleanup(); this.selectCues(initial); };
+    const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); } };
+    this.pointerCleanup = cancel; window.addEventListener('pointermove',move); window.addEventListener('pointerup',end); window.addEventListener('pointercancel',cancel); window.addEventListener('keydown',key);
+  }
+  beginMultiMove(event, kind = 'move', anchorId = this.selectedId) {
+    if (event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation(); this.pointerCleanup?.(); this.inlineEdit?.finish(true,true); this.scroller.focus({preventScroll:true});
+    const ids = this.getSelectedCueIds(), project = this.project, original = project.cues.filter(c => ids.has(c.id));
+    if (original.length < 2) return;
+    const laneOrder = this.laneLayout.rows.filter(r => r.kind === 'lane').map(r => r.lane.id), anchor = original.find(c => c.id === anchorId) || original[0];
+    const startX = event.clientX-this.rowsEl.getBoundingClientRect().left;
+    const cards = [...this.rowsEl.querySelectorAll('.cueflow-cue')].filter(el => ids.has(el.dataset.id));
+    const styles = new Map(cards.map(el => [el.dataset.id,{css:el.style.cssText,title:el.getAttribute('title')}]));
+    let moved = false, last = null, drafts = original, guides = null;
+    const move = e => {
+      if (!moved && Math.hypot(e.clientX-event.clientX,kind === 'move' ? e.clientY-event.clientY : 0) < 4) return;
+      moved = true; last = {clientX:e.clientX,clientY:e.clientY};
+      const delta = Math.round(((e.clientX-this.rowsEl.getBoundingClientRect().left-startX)/this.scale)/this.snap)*this.snap;
+      const target = laneAtY(this.laneLayout,e.clientY-this.rowsEl.getBoundingClientRect().top);
+      const laneDelta = kind === 'move' && target ? laneOrder.indexOf(target.lane.id)-laneOrder.indexOf(anchor.laneId) : 0;
+      drafts = transformCueSelection(project,ids,kind,delta,laneDelta,laneOrder,this.autoSchedule);
+      const preview = new Map(drafts.map(c => [c.id,c]));
+      for (const card of cards) {
+        const cue = preview.get(card.dataset.id), old = original.find(c => c.id === cue.id);
+        card.classList.add('cueflow-dragging'); card.style.left = cue.startSec*this.scale+'px'; card.style.width = Math.max(cue.durationSec ? 20 : 18,cue.durationSec*this.scale)+'px';
+        card.style.transform = `translateY(${this.laneLayout.laneY.get(cue.laneId)-this.laneLayout.laneY.get(old.laneId)}px)`;
+        card.setAttribute('title',cue.name+' · T+'+fmtTime(cue.startSec)+' / '+fmtTime(cue.durationSec));
+      }
+      this.drawLinks(this.rowsEl.querySelector('.cueflow-links'),preview); this.renderSelectionBox(preview);
+      if (!guides) guides = this.rowsEl.createDiv({cls:'cueflow-alignment-guides',attr:{'aria-hidden':'true'}});
+      this.drawAlignmentGuides(preview.get(anchor.id),kind,guides,ids);
+    };
+    const stopScroll = this.startCanvasAutoScroll(() => last,move);
+    const cleanup = () => { stopScroll(); window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',end); window.removeEventListener('pointercancel',cancel); window.removeEventListener('keydown',key); guides?.remove(); this.pointerCleanup = null; };
+    const restore = () => { for (const card of cards) { card.classList.remove('cueflow-dragging'); card.style.cssText = styles.get(card.dataset.id).css; card.setAttribute('title',styles.get(card.dataset.id).title); } this.drawLinks(this.rowsEl.querySelector('.cueflow-links')); this.renderSelectionBox(); };
+    const end = e => { cleanup(); if (moved) { this.gestureClick = {x:e.clientX,y:e.clientY,until:Date.now()+350}; const changed = drafts.some(c => { const old = original.find(o => o.id === c.id); return c.startSec !== old.startSec || c.durationSec !== old.durationSec || c.laneId !== old.laneId; }); if (!changed || !this.saveCueBatch(drafts,true)) restore(); } };
+    const cancel = () => { cleanup(); restore(); };
+    const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); } };
+    this.pointerCleanup = cancel; window.addEventListener('pointermove',move); window.addEventListener('pointerup',end); window.addEventListener('pointercancel',cancel); window.addEventListener('keydown',key);
   }
   setLabelWidth(value, persist = true) {
     const requested = Number(value);
@@ -1479,6 +1871,7 @@ class CueFlowView extends ItemView {
       this.board.querySelector('.cueflow-column-resizer')?.setAttribute('aria-valuenow', String(this.labelWidth));
       this.updateClockUI();
     }
+    this.renderSelectionBox();
     if (persist) {
       this.plugin.settings.labelWidth = this.labelWidth;
       for (const leaf of this.app.workspace?.getLeavesOfType(VIEW_TYPE) || []) if (leaf.view !== this && leaf.view.plugin === this.plugin) leaf.view.setLabelWidth(this.labelWidth, false);
@@ -1546,11 +1939,12 @@ class CueFlowView extends ItemView {
   }
   renderCue(track, cue, lane) {
     const milestone = cue.durationSec === 0;
-    const el = track.createDiv({ cls: `cueflow-cue ${milestone ? 'cueflow-milestone' : ''} ${cue.status === 'done' ? 'cueflow-done' : ''} ${hasConflict(this.project, cue) ? 'cueflow-conflict' : ''} ${this.selectedId === cue.id ? 'cueflow-selected' : ''}` });
+    const el = track.createDiv({ cls: `cueflow-cue ${milestone ? 'cueflow-milestone' : ''} ${cue.critical ? 'cueflow-critical' : ''} ${cue.status === 'done' ? 'cueflow-done' : ''} ${hasConflict(this.project, cue) ? 'cueflow-conflict' : ''} ${this.selectedIds?.has(cue.id) ? 'cueflow-selected' : ''}` });
     el.dataset.id = cue.id; el.style.left = `${cue.startSec * this.scale}px`;
     el.style.width = `${Math.max(milestone ? 18 : cue.durationSec * this.scale, milestone ? 18 : 20)}px`;
     el.style.setProperty('--cueflow-color', lane.color);
-    el.setAttribute('title', `${cue.name}\nT+${fmtTime(cue.startSec)} 至 T+${fmtTime(cue.startSec + cue.durationSec)}\n${cue.note}`);
+    el.setAttribute('title', `${cue.critical ? '★ 关键动作 · ' : ''}${cue.name}\nT+${fmtTime(cue.startSec)} 至 T+${fmtTime(cue.startSec + cue.durationSec)}\n${cue.note}`);
+    if (cue.critical) el.createSpan({cls:'cueflow-critical-badge',text:'★',attr:{title:'关键动作','aria-label':'关键动作'}});
     if (!milestone) {
       const left = el.createDiv({ cls: 'cueflow-resize cueflow-resize-left' });
       left.addEventListener('pointerdown', e => this.beginMove(e, cue, el, 'resize-left'));
@@ -1571,25 +1965,29 @@ class CueFlowView extends ItemView {
     }
     el.addEventListener('click', e => {
       e.stopPropagation();
-      this.selectCue(cue.id);
+      if (this.swallowGestureClick(e) || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (!this.getSelectedCueIds().has(cue.id)) this.selectCue(cue.id);
     });
     el.addEventListener('dblclick', e => { e.preventDefault(); e.stopPropagation(); this.beginInlineCueName(cue.id); });
     el.addEventListener('contextmenu', e => {
       e.preventDefault(); e.stopPropagation(); const menu = new Menu();
-      this.selectCue(cue.id);
+      if (!this.getSelectedCueIds().has(cue.id)) this.selectCue(cue.id);
       menu.addItem(i => i.setTitle('修改标题').setIcon('pencil').onClick(() => this.beginInlineCueName(cue.id)));
-      menu.addItem(i => i.setTitle('编辑详情').setIcon('list').onClick(() => new CueModal(this, cue).open()));
+      menu.addItem(i => i.setTitle('编辑详情').setIcon('list').onClick(() => { this.selectCue(cue.id); new CueModal(this, cue).open(); }));
+      const allCritical = this.project.cues.filter(c => this.getSelectedCueIds().has(c.id)).every(c => c.critical);
+      menu.addItem(i => i.setTitle(allCritical ? '取消关键动作标记' : '标记为关键动作').setIcon('star').onClick(() => this.setSelectionCritical(!allCritical)));
       menu.addItem(i => i.setTitle('复制动作').setIcon('copy').onClick(() => this.duplicateCue(cue)));
       menu.addItem(i => i.setTitle('设为里程碑').setIcon('flag').onClick(() => { cue.durationSec = 0; this.recordChange(); }));
       menu.addItem(i => i.setTitle('切换完成状态').setIcon('check').onClick(() => { cue.status = cue.status === 'done' ? 'planned' : 'done'; this.recordChange(); }));
-      menu.addSeparator(); menu.addItem(i => i.setTitle('删除动作').setIcon('trash').onClick(() => this.deleteCue(cue.id)));
+      menu.addSeparator(); menu.addItem(i => i.setTitle(this.getSelectedCueIds().size > 1 ? '删除所选动作' : '删除动作').setIcon('trash').onClick(() => this.deleteCues(this.getSelectedCueIds())));
       menu.showAtMouseEvent(e);
     });
   }
-  drawAlignmentGuides(cue, kind, layer) {
+  drawAlignmentGuides(cue, kind, layer, excludeIds = new Set()) {
     layer.empty();
     const visible = new Set(this.laneLayout.laneY.keys());
-    const guides = findAlignmentGuides(this.project, cue.id, cue.startSec, cue.durationSec, this.scale, visible, kind);
+    const source = excludeIds.size ? {...this.project,cues:this.project.cues.filter(c => !excludeIds.has(c.id))} : this.project;
+    const guides = findAlignmentGuides(source, cue.id, cue.startSec, cue.durationSec, this.scale, visible, kind);
     for (const match of guides) {
       const line = layer.createDiv({ cls: 'cueflow-align-vertical' }); line.dataset.sec = String(match.sec); line.dataset.edge = match.edge;
       line.style.left = (this.labelWidth + match.sec * this.scale) + 'px';
@@ -1604,6 +2002,8 @@ class CueFlowView extends ItemView {
   beginMove(e, cue, el, kind) {
     if (e.button !== 0) return;
     e.stopPropagation(); e.preventDefault();
+    if (e.ctrlKey || e.metaKey || e.shiftKey) { this.pointerCleanup?.(); this.scroller.focus({preventScroll:true}); this.selectCue(cue.id,e.shiftKey ? 'add' : 'toggle'); return; }
+    if (this.getSelectedCueIds().has(cue.id) && this.getSelectedCueIds().size > 1) { this.beginMultiMove(e,kind,cue.id); return; }
     this.pointerCleanup?.();
     this.scroller.focus({ preventScroll: true }); this.selectCue(cue.id);
     const pointerX = e.clientX, pointerY = e.clientY;
@@ -1726,4 +2126,4 @@ module.exports = class CueFlowPlugin extends Plugin {
 };
 
 // Export non-Obsidian pure helpers for local smoke tests (Obsidian ignores this).
-module.exports.__test = { fmtTime, parseTime, validateProject, createsCycle, scheduleDependents, hasConflict, makeExample, roundSnap, CueFlowView, safeMarkdown, xmlEscape, laneGroupName, buildLaneLayout, laneAtY, LaneModal, StringModal, CueModal, CueFlowSettingTab, dependencyOrder, DisplaySettingsModal, normalizeFolder, latestCueEnd, ProjectDurationModal, connectionIntent, projectConnections, connectionRects, portPoint, segmentHitsRect, routeConnection, roundedPath, findAlignmentGuides };
+module.exports.__test = { fmtTime, parseTime, validateProject, createsCycle, scheduleDependents, hasConflict, makeExample, roundSnap, CueFlowView, safeMarkdown, xmlEscape, laneGroupName, buildLaneLayout, laneAtY, LaneModal, StringModal, CueModal, CueFlowSettingTab, dependencyOrder, DisplaySettingsModal, normalizeFolder, latestCueEnd, ProjectDurationModal, connectionIntent, projectConnections, connectionRects, portPoint, segmentHitsRect, routeConnection, roundedPath, findAlignmentGuides, cuesInMarquee, transformCueSelection, parseProjectFile, parseProjectBundle, buildProjectFile, importedProjectMarkdown, summarizeProjectChanges, inspectProject, ProjectImportModal, ProjectExportModal, ProjectPasteModal };

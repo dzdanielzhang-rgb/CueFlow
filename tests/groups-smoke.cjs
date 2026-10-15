@@ -15,7 +15,7 @@ for (const lane of legacy.lanes) delete lane.groupId;
 legacy.lanes.push({ id: 'custom-old', name: '自定义岗位', color: '#123456' });
 const originalCues = copy(legacy.cues);
 const migrated = validateProject(legacy);
-assert.equal(migrated.version, 3);
+assert.equal(migrated.version, 4);
 assert.equal(migrated.lanes.find(l => l.name === '无人机').groupId, 'equipment');
 assert.equal(migrated.lanes.find(l => l.name === '飞手 A').groupId, 'personnel');
 assert.equal(migrated.lanes.at(-1).groupId, '');

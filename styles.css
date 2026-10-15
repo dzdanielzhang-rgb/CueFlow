@@ -56,6 +56,9 @@
 .cueflow-cue { position:absolute; top:var(--cueflow-cue-top); height:var(--cueflow-cue-height); border:1px solid color-mix(in srgb,var(--cueflow-color) 70%, var(--background-primary)); background:color-mix(in srgb,var(--cueflow-color) 21%,var(--background-primary)); border-left:5px solid var(--cueflow-color); color:var(--text-normal); box-shadow:0 1px 3px rgba(0,0,0,.08); display:flex; align-items:center; border-radius:6px; z-index:5; cursor:grab; user-select:none; transition:box-shadow .1s; min-width:18px; }
 .cueflow-cue:hover { z-index:7; box-shadow:0 3px 12px rgba(0,0,0,.19); }
 .cueflow-cue.cueflow-selected { outline:2px solid var(--interactive-accent); outline-offset:1px; }
+.cueflow-import-preview { padding:8px 12px; border:1px solid var(--background-modifier-border); border-radius:6px; background:var(--background-secondary); margin:10px 0; }
+.cueflow-import-warning { color:var(--text-warning,#a76b00); }
+.cueflow-project-paste { width:100%; min-height:240px; font-family:var(--font-monospace,monospace); font-size:12px; resize:vertical; }
 .cueflow-cue.cueflow-dragging { cursor:grabbing; z-index:15; box-shadow:0 8px 20px rgba(0,0,0,.25); opacity:.92; }
 .cueflow-cue.cueflow-conflict { outline:2px dashed var(--color-red); outline-offset:1px; }
 .cueflow-cue.cueflow-done { opacity:.64; }
@@ -147,3 +150,11 @@
 .cueflow-align-vertical { position:absolute; top:0; bottom:0; width:0; border-left:2px dashed var(--interactive-accent); opacity:.95; }
 .cueflow-align-horizontal { position:absolute; right:0; height:0; border-top:1px dashed var(--interactive-accent); opacity:.6; }
 .cueflow-align-label { position:absolute; left:5px; padding:2px 5px; color:var(--text-on-accent); background:var(--interactive-accent); border-radius:3px; font-size:10px; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,.12); }
+.cueflow-marquee { position:absolute; border:1px solid var(--interactive-accent); background:color-mix(in srgb,var(--interactive-accent) 12%,transparent); z-index:16; pointer-events:none; }
+.cueflow-selection-box { position:absolute; border:1px dashed var(--interactive-accent); border-radius:5px; z-index:8; pointer-events:none; }
+.cueflow-selection-count { position:absolute; top:-17px; left:5px; padding:1px 5px; border-radius:3px; background:var(--interactive-accent); color:var(--text-on-accent); font-size:10px; white-space:nowrap; }
+.cueflow-selection-handle { position:absolute; top:50%; margin-top:-12px; width:9px; height:24px; border:2px solid var(--background-primary); border-radius:4px; background:var(--interactive-accent); cursor:ew-resize; pointer-events:auto; touch-action:none; }
+.cueflow-selection-left { left:-5px; }
+.cueflow-selection-right { right:-5px; }
+.cueflow-critical-badge { position:absolute; right:3px; top:-9px; z-index:1; color:#9a6700; background:var(--background-primary); border:1px solid #d6a341; border-radius:50%; width:16px; height:16px; display:flex; align-items:center; justify-content:center; font-size:11px; line-height:1; pointer-events:none; }
+.cueflow-cue.cueflow-selected { outline:2px solid var(--interactive-accent); outline-offset:1px; }

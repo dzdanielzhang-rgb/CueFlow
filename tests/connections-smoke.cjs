@@ -4,7 +4,7 @@ Module._load=function(name){if(name==='obsidian')return{Plugin:class{},ItemView:
 const t=require('../main.js').__test;
 function fixture(){const p=t.validateProject({version:2,name:'连线测试',durationSec:600,groups:[{id:'g',name:'分组'}],lanes:[{id:'lane',name:'人员',groupId:'g'}],cues:[
 {id:'a',name:'A',laneId:'lane',startSec:100,durationSec:30,dependsOn:[]},{id:'b',name:'B',laneId:'lane',startSec:10,durationSec:20,dependsOn:[]},{id:'c',name:'C',laneId:'lane',startSec:200,durationSec:20,dependsOn:[]}]});const v=Object.create(t.CueFlowView.prototype);Object.assign(v,{project:p,autoSchedule:true,history:[JSON.stringify(p)],historyIndex:0,queueSave(){},render(){}});return v;}
-let checks=0,v=fixture();assert.equal(v.project.version,3);assert.deepEqual(v.project.relations,[]);checks++;
+let checks=0,v=fixture();assert.equal(v.project.version,4);assert.deepEqual(v.project.relations,[]);checks++;
 assert.equal(v.addConnection('a','right','b','left'),true);assert.deepEqual(v.project.cues[1].dependsOn,['a']);assert.equal(v.project.cues[1].startSec,130);checks++;
 v=fixture();assert.equal(v.addConnection('a','left','b','right'),true);assert.deepEqual(v.project.cues[0].dependsOn,['b']);assert.equal(v.project.cues[1].dependsOn.length,0);checks++;
 v=fixture();const before=JSON.stringify(v.project.cues),duration=v.project.durationSec;assert.equal(v.addConnection('a','top','b','bottom'),true);assert.equal(JSON.stringify(v.project.cues),before);assert.equal(v.project.durationSec,duration);checks++;
