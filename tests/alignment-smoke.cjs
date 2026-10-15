@@ -1,0 +1,12 @@
+"use strict";
+const assert=require('node:assert/strict'),Module=require('node:module'),original=Module._load;
+Module._load=function(name){if(name==='obsidian')return{Plugin:class{},ItemView:class{},Modal:class{},Setting:class{},Menu:class{},PluginSettingTab:class{},TFile:class{},Notice:class{}};return original.apply(this,arguments);};
+const t=require('../main.js').__test,p={cues:[{id:'a',laneId:'l1',startSec:30,durationSec:30},{id:'b',laneId:'l2',startSec:70,durationSec:30}]},visible=new Set(['l1','l2']);let checks=0;
+let g=t.findAlignmentGuides(p,'a',40,30,3,visible);assert.equal(g.length,1);assert.equal(g[0].sec,70);assert.equal(g[0].edge,'end');checks++;
+g=t.findAlignmentGuides(p,'a',69,30,3,visible);assert.equal(g[0].sec,70);assert.equal(g[0].edge,'start');assert.equal(g[0].distance,1);checks++;
+assert.equal(t.findAlignmentGuides(p,'a',65,30,3,visible).length,0);checks++;
+assert.equal(t.findAlignmentGuides(p,'a',69,30,10,visible).length,0);assert.equal(t.findAlignmentGuides(p,'a',70,30,10,visible).length,2);checks++;
+assert.equal(t.findAlignmentGuides(p,'a',40,30,3,new Set(['l1'])).length,0);checks++;
+g=t.findAlignmentGuides(p,'a',40,30,3,visible,'resize-left');assert.equal(g.length,0);g=t.findAlignmentGuides(p,'a',30,40,3,visible,'resize-right');assert.equal(g.length,1);assert.equal(g[0].sec,70);checks++;
+const before=JSON.stringify(p);t.findAlignmentGuides(p,'a',40,30,3,visible);assert.equal(JSON.stringify(p),before);checks++;
+console.log('Alignment PASS ('+checks+' targeted checks: boundaries, visual tolerance, zoom, hidden lanes, resize and immutable hints).');

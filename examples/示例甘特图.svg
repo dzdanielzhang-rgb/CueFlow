@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2415" height="662" viewBox="0 0 2415 662">
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="24" y="38" font-family="sans-serif" font-size="24" font-weight="bold" fill="#1c2734">无人机空地协同演示（示例）</text>
+<text x="24" y="62" font-family="sans-serif" font-size="13" fill="#697688">CueFlow · 相对时间调度 · T+00:00</text>
+<line x1="190" y1="102" x2="190" y2="632" stroke="#e6ebf1"/>
+<text x="195" y="95" font-size="12" font-family="sans-serif" fill="#607083">00:00</text>
+<line x1="280" y1="102" x2="280" y2="632" stroke="#e6ebf1"/>
+<text x="285" y="95" font-size="12" font-family="sans-serif" fill="#607083">00:30</text>
+<line x1="370" y1="102" x2="370" y2="632" stroke="#e6ebf1"/>
+<text x="375" y="95" font-size="12" font-family="sans-serif" fill="#607083">01:00</text>
+<line x1="460" y1="102" x2="460" y2="632" stroke="#e6ebf1"/>
+<text x="465" y="95" font-size="12" font-family="sans-serif" fill="#607083">01:30</text>
+<line x1="550" y1="102" x2="550" y2="632" stroke="#e6ebf1"/>
+<text x="555" y="95" font-size="12" font-family="sans-serif" fill="#607083">02:00</text>
+<line x1="640" y1="102" x2="640" y2="632" stroke="#e6ebf1"/>
+<text x="645" y="95" font-size="12" font-family="sans-serif" fill="#607083">02:30</text>
+<line x1="730" y1="102" x2="730" y2="632" stroke="#e6ebf1"/>
+<text x="735" y="95" font-size="12" font-family="sans-serif" fill="#607083">03:00</text>
+<line x1="820" y1="102" x2="820" y2="632" stroke="#e6ebf1"/>
+<text x="825" y="95" font-size="12" font-family="sans-serif" fill="#607083">03:30</text>
+<line x1="910" y1="102" x2="910" y2="632" stroke="#e6ebf1"/>
+<text x="915" y="95" font-size="12" font-family="sans-serif" fill="#607083">04:00</text>
+<line x1="1000" y1="102" x2="1000" y2="632" stroke="#e6ebf1"/>
+<text x="1005" y="95" font-size="12" font-family="sans-serif" fill="#607083">04:30</text>
+<line x1="1090" y1="102" x2="1090" y2="632" stroke="#e6ebf1"/>
+<text x="1095" y="95" font-size="12" font-family="sans-serif" fill="#607083">05:00</text>
+<line x1="1180" y1="102" x2="1180" y2="632" stroke="#e6ebf1"/>
+<text x="1185" y="95" font-size="12" font-family="sans-serif" fill="#607083">05:30</text>
+<line x1="1270" y1="102" x2="1270" y2="632" stroke="#e6ebf1"/>
+<text x="1275" y="95" font-size="12" font-family="sans-serif" fill="#607083">06:00</text>
+<line x1="1360" y1="102" x2="1360" y2="632" stroke="#e6ebf1"/>
+<text x="1365" y="95" font-size="12" font-family="sans-serif" fill="#607083">06:30</text>
+<line x1="1450" y1="102" x2="1450" y2="632" stroke="#e6ebf1"/>
+<text x="1455" y="95" font-size="12" font-family="sans-serif" fill="#607083">07:00</text>
+<line x1="1540" y1="102" x2="1540" y2="632" stroke="#e6ebf1"/>
+<text x="1545" y="95" font-size="12" font-family="sans-serif" fill="#607083">07:30</text>
+<line x1="1630" y1="102" x2="1630" y2="632" stroke="#e6ebf1"/>
+<text x="1635" y="95" font-size="12" font-family="sans-serif" fill="#607083">08:00</text>
+<line x1="1720" y1="102" x2="1720" y2="632" stroke="#e6ebf1"/>
+<text x="1725" y="95" font-size="12" font-family="sans-serif" fill="#607083">08:30</text>
+<line x1="1810" y1="102" x2="1810" y2="632" stroke="#e6ebf1"/>
+<text x="1815" y="95" font-size="12" font-family="sans-serif" fill="#607083">09:00</text>
+<line x1="1900" y1="102" x2="1900" y2="632" stroke="#e6ebf1"/>
+<text x="1905" y="95" font-size="12" font-family="sans-serif" fill="#607083">09:30</text>
+<line x1="1990" y1="102" x2="1990" y2="632" stroke="#e6ebf1"/>
+<text x="1995" y="95" font-size="12" font-family="sans-serif" fill="#607083">10:00</text>
+<line x1="2080" y1="102" x2="2080" y2="632" stroke="#e6ebf1"/>
+<text x="2085" y="95" font-size="12" font-family="sans-serif" fill="#607083">10:30</text>
+<line x1="2170" y1="102" x2="2170" y2="632" stroke="#e6ebf1"/>
+<text x="2175" y="95" font-size="12" font-family="sans-serif" fill="#607083">11:00</text>
+<line x1="2260" y1="102" x2="2260" y2="632" stroke="#e6ebf1"/>
+<text x="2265" y="95" font-size="12" font-family="sans-serif" fill="#607083">11:30</text>
+<line x1="2350" y1="102" x2="2350" y2="632" stroke="#e6ebf1"/>
+<text x="2355" y="95" font-size="12" font-family="sans-serif" fill="#607083">12:00</text>
+<rect x="0" y="120" width="2415" height="36" fill="#e8edf5"/>
+<text x="22" y="144" font-size="14" font-weight="bold" font-family="sans-serif" fill="#334155">执行人员 · 4</text>
+<rect x="0" y="156" width="2415" height="72" fill="#ffffff"/>
+<line x1="0" y1="228" x2="2415" y2="228" stroke="#e4e9ef"/>
+<rect x="21" y="175" width="6" height="30" rx="3" fill="#5B78E5"/>
+<text x="39" y="195" font-size="14" font-family="sans-serif" fill="#1f2937">导播</text>
+<rect x="0" y="228" width="2415" height="72" fill="#ffffff"/>
+<line x1="0" y1="300" x2="2415" y2="300" stroke="#e4e9ef"/>
+<rect x="21" y="247" width="6" height="30" rx="3" fill="#0F9C91"/>
+<text x="39" y="267" font-size="14" font-family="sans-serif" fill="#1f2937">飞手 A</text>
+<rect x="0" y="300" width="2415" height="72" fill="#ffffff"/>
+<line x1="0" y1="372" x2="2415" y2="372" stroke="#e4e9ef"/>
+<rect x="21" y="319" width="6" height="30" rx="3" fill="#D69332"/>
+<text x="39" y="339" font-size="14" font-family="sans-serif" fill="#1f2937">飞手 B</text>
+<rect x="0" y="372" width="2415" height="72" fill="#ffffff"/>
+<line x1="0" y1="444" x2="2415" y2="444" stroke="#e4e9ef"/>
+<rect x="21" y="391" width="6" height="30" rx="3" fill="#637E94"/>
+<text x="39" y="411" font-size="14" font-family="sans-serif" fill="#1f2937">演员/场控</text>
+<rect x="0" y="444" width="2415" height="36" fill="#e8edf5"/>
+<text x="22" y="468" font-size="14" font-weight="bold" font-family="sans-serif" fill="#334155">设备 · 2</text>
+<rect x="0" y="480" width="2415" height="72" fill="#ffffff"/>
+<line x1="0" y1="552" x2="2415" y2="552" stroke="#e4e9ef"/>
+<rect x="21" y="499" width="6" height="30" rx="3" fill="#7E69CF"/>
+<text x="39" y="519" font-size="14" font-family="sans-serif" fill="#1f2937">无人机</text>
+<rect x="0" y="552" width="2415" height="72" fill="#ffffff"/>
+<line x1="0" y1="624" x2="2415" y2="624" stroke="#e4e9ef"/>
+<rect x="21" y="571" width="6" height="30" rx="3" fill="#CF7183"/>
+<text x="39" y="591" font-size="14" font-family="sans-serif" fill="#1f2937">地面机器人</text>
+<line x1="190" y1="120" x2="190" y2="624" stroke="#e6ebf1"/>
+<line x1="280" y1="120" x2="280" y2="624" stroke="#e6ebf1"/>
+<line x1="370" y1="120" x2="370" y2="624" stroke="#e6ebf1"/>
+<line x1="460" y1="120" x2="460" y2="624" stroke="#e6ebf1"/>
+<line x1="550" y1="120" x2="550" y2="624" stroke="#e6ebf1"/>
+<line x1="640" y1="120" x2="640" y2="624" stroke="#e6ebf1"/>
+<line x1="730" y1="120" x2="730" y2="624" stroke="#e6ebf1"/>
+<line x1="820" y1="120" x2="820" y2="624" stroke="#e6ebf1"/>
+<line x1="910" y1="120" x2="910" y2="624" stroke="#e6ebf1"/>
+<line x1="1000" y1="120" x2="1000" y2="624" stroke="#e6ebf1"/>
+<line x1="1090" y1="120" x2="1090" y2="624" stroke="#e6ebf1"/>
+<line x1="1180" y1="120" x2="1180" y2="624" stroke="#e6ebf1"/>
+<line x1="1270" y1="120" x2="1270" y2="624" stroke="#e6ebf1"/>
+<line x1="1360" y1="120" x2="1360" y2="624" stroke="#e6ebf1"/>
+<line x1="1450" y1="120" x2="1450" y2="624" stroke="#e6ebf1"/>
+<line x1="1540" y1="120" x2="1540" y2="624" stroke="#e6ebf1"/>
+<line x1="1630" y1="120" x2="1630" y2="624" stroke="#e6ebf1"/>
+<line x1="1720" y1="120" x2="1720" y2="624" stroke="#e6ebf1"/>
+<line x1="1810" y1="120" x2="1810" y2="624" stroke="#e6ebf1"/>
+<line x1="1900" y1="120" x2="1900" y2="624" stroke="#e6ebf1"/>
+<line x1="1990" y1="120" x2="1990" y2="624" stroke="#e6ebf1"/>
+<line x1="2080" y1="120" x2="2080" y2="624" stroke="#e6ebf1"/>
+<line x1="2170" y1="120" x2="2170" y2="624" stroke="#e6ebf1"/>
+<line x1="2260" y1="120" x2="2260" y2="624" stroke="#e6ebf1"/>
+<line x1="2350" y1="120" x2="2350" y2="624" stroke="#e6ebf1"/>
+<g><title>开场画面 / 主持词 · T+00:00 · 导播确认投屏和解说词。</title>
+<rect x="190" y="179" width="225" height="30" rx="5" fill="#5B78E5" opacity=".86"/>
+<text x="196" y="198" font-size="12" font-family="sans-serif" fill="#fff">开场画面 / 主持词</text>
+</g>
+<g><title>端侧 Mesh 组网确认 · T+00:00 · 2 台遥控、4 架无人机与 1 台地面机器人完成组网。</title>
+<rect x="190" y="251" width="285" height="30" rx="5" fill="#0F9C91" opacity=".86"/>
+<text x="196" y="270" font-size="12" font-family="sans-serif" fill="#fff">端侧 Mesh 组网确认</text>
+</g>
+<g><title>四机分区搜索 · T+01:45 · 确认航线与画面稳定。</title>
+<rect x="505" y="251" width="540" height="30" rx="5" fill="#0F9C91" opacity=".86"/>
+<text x="511" y="270" font-size="12" font-family="sans-serif" fill="#fff">四机分区搜索</text>
+</g>
+<g><title>切换搜索画面 · T+01:50 · 切至飞手 A 遥控画面。</title>
+<rect x="520" y="179" width="105" height="30" rx="5" fill="#5B78E5" opacity=".86"/>
+<text x="526" y="198" font-size="12" font-family="sans-serif" fill="#fff">切换搜索画面</text>
+</g>
+<g><title>Flex 地面出动 · T+03:10 · 提示地面机器人操作人员。</title>
+<rect x="760" y="323" width="375" height="30" rx="5" fill="#D69332" opacity=".86"/>
+<text x="766" y="342" font-size="12" font-family="sans-serif" fill="#fff">Flex 地面出动</text>
+</g>
+<g><title>目标人员入场 · T+03:15 · 场控通过耳返提示演员。</title>
+<rect x="775" y="395" width="150" height="30" rx="5" fill="#637E94" opacity=".86"/>
+<text x="781" y="414" font-size="12" font-family="sans-serif" fill="#fff">目标人员入场</text>
+</g>
+<g><title>第一幕结束 · T+05:30 · 里程碑：全部设备进入下一幕准备状态。</title>
+<polygon points="1180,181 1190,193 1180,205 1170,193" fill="#5B78E5"/>
+<text x="1195" y="197" font-size="12" font-family="sans-serif" fill="#283442">第一幕结束</text>
+</g>
+<path d="M 475 266 H 490 V 266 H 505" fill="none" stroke="#465366" stroke-width="1.5" stroke-dasharray="3,3"/>
+<path d="M 415 194 H 430 V 194 H 520" fill="none" stroke="#465366" stroke-width="1.5" stroke-dasharray="3,3"/>
+<path d="M 1045 266 H 1060 V 194 H 1180" fill="none" stroke="#465366" stroke-width="1.5" stroke-dasharray="3,3"/>
+</svg>

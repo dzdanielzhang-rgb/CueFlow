@@ -1,0 +1,27 @@
+"use strict";
+const assert=require('node:assert/strict'),Module=require('node:module'),original=Module._load;
+Module._load=function(name){if(name==='obsidian')return{Plugin:class{},ItemView:class{},Modal:class{},Setting:class{},Menu:class{},PluginSettingTab:class{},TFile:class{},Notice:class{}};return original.apply(this,arguments);};
+const t=require('../main.js').__test;
+let checks=0;
+const v=Object.create(t.CueFlowView.prototype),p=t.makeExample();
+p.groups.push({id:'c',name:'备用组'},{id:'empty',name:'空组'});
+Object.assign(v,{project:p,collapsedGroups:new Set(['equipment']),history:[JSON.stringify(p)],historyIndex:0,
+  queueSave(){},render(){},elapsed:0,running:false,plugin:{settings:{},saveSettings:async()=>{}},app:{workspace:{getLeavesOfType:()=>[]}}});
+const lanes=JSON.stringify(p.lanes),cues=JSON.stringify(p.cues),duration=p.durationSec;
+assert.equal(v.moveGroupTo('personnel','c','after'),true);assert.deepEqual(p.groups.map(g=>g.id),['equipment','c','personnel','empty']);checks++;
+assert.equal(JSON.stringify(p.lanes),lanes);assert.equal(JSON.stringify(p.cues),cues);assert.equal(p.durationSec,duration);assert.ok(v.collapsedGroups.has('equipment'));checks++;
+assert.equal(v.moveGroupTo('empty','equipment','before'),true);assert.equal(p.groups[0].id,'empty');checks++;
+const before=JSON.stringify(p),h=v.history.length;
+for(const args of [['empty','empty'],['missing','c'],['c','missing'],['','c'],['empty','equipment','before']])assert.equal(v.moveGroupTo(...args),false);
+assert.equal(JSON.stringify(p),before);assert.equal(v.history.length,h);checks++;
+v.undo();assert.deepEqual(v.project.groups.map(g=>g.id),['equipment','c','personnel','empty']);v.redo();assert.equal(JSON.stringify(v.project),before);checks++;
+assert.deepEqual(t.validateProject(JSON.parse(before)),v.project);checks++;
+const order=t.buildLaneLayout(v.project).rows.filter(r=>r.kind==='lane').map(r=>r.lane.id);
+assert.deepEqual(order,['lane-4','lane-5','lane-1','lane-2','lane-3','lane-6']);checks++;
+assert.equal(v.updateProjectSettings({name:' 新项目名称 ',durationSec:1200}),true);assert.equal(v.project.name,'新项目名称');assert.equal(v.project.durationSec,1200);checks++;
+const b=JSON.stringify(v.project);assert.equal(v.updateProjectSettings({name:'',durationSec:1800}),false);assert.equal(v.updateProjectSettings({name:'不应保存',durationSec:1}),false);assert.equal(JSON.stringify(v.project),b);checks++;
+v.undo();assert.equal(v.project.name,p.name);v.redo();assert.equal(v.project.name,'新项目名称');checks++;
+assert.equal(v.labelWidth,182);v.setLabelWidth(320);assert.equal(v.labelWidth,320);assert.equal(v.plugin.settings.labelWidth,320);checks++;
+v.setLabelWidth(-500,false);assert.equal(v.labelWidth,160);v.setLabelWidth(99999,false);assert.equal(v.labelWidth,600);v.setLabelWidth(NaN,false);assert.equal(v.labelWidth,182);checks++;
+assert.equal(JSON.stringify(v.project.cues),cues);assert.equal(JSON.stringify(v.project.lanes),lanes);checks++;
+console.log('Group/edit/width PASS ('+checks+' checks: whole groups, unchanged actions/dependencies, no-ops, undo/redo, persistence, project edits and width bounds).');

@@ -1,0 +1,9 @@
+{
+  "id": "cueflow-timeline",
+  "name": "CueFlow Timeline",
+  "version": "0.7.0",
+  "minAppVersion": "1.5.0",
+  "description": "秒级演示脚本与多角色泳道调度：拖拽、拉伸、依赖关系与排练时钟。",
+  "author": "CueFlow Community",
+  "isDesktopOnly": true
+}

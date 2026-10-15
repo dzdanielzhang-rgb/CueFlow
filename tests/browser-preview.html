@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"/><title>CueFlow browser smoke test</title><link rel="stylesheet" href="../styles.css"/><style>
+:root{--background-primary:#fff;--background-primary-alt:#f8fafc;--background-secondary:#f4f6fa;--background-modifier-border:#e5e9ef;--background-modifier-hover:#edf1f6;--interactive-accent:#506dd3;--text-normal:#243348;--text-muted:#748197;--text-accent:#506dd3;--text-on-accent:#fff;--color-red:#dd4a4e}
+body{margin:0;font-family:system-ui,'Microsoft YaHei',sans-serif}#app{height:100vh}button,select{font:inherit}#error{position:fixed;bottom:0;right:0;color:red;background:#fff;z-index:10000}
+</style></head><body><div id="app"></div><div id="error"></div><script>
+window.onerror=(m,s,l)=>document.getElementById('error').textContent=m+' line:'+l;
+HTMLElement.prototype.createEl=function(tag,opts={}){let el=document.createElement(tag);this.appendChild(el);if(opts.text!==undefined)el.textContent=opts.text;if(opts.cls)el.className=opts.cls;if(opts.attr)for(const [k,v] of Object.entries(opts.attr))el.setAttribute(k,v);return el};
+HTMLElement.prototype.createDiv=function(opts={}){return this.createEl('div',opts)};
+HTMLElement.prototype.createSpan=function(opts={}){return this.createEl('span',opts)};
+HTMLElement.prototype.empty=function(){this.replaceChildren()};
+HTMLElement.prototype.addClass=function(cls){this.classList.add(cls)};
+HTMLElement.prototype.setText=function(t){this.textContent=t};
+class Plugin {constructor(){this.app=window.fakeApp;}async loadData(){return null;} async saveData(){} registerView(id,fn){this._factory=fn}addRibbonIcon(){} addCommand(){} addSettingTab(){}}
+class ItemView {constructor(leaf){this.app=leaf.app;this.contentEl=document.getElementById('app')}}
+class Modal{constructor(app){this.app=app;}open(){console.log('Modal open')}close(){}}
+class Setting{}class PluginSettingTab{}class Menu{}class TFile{}
+window.require=function(s){return {Plugin,ItemView,Modal,Setting,Notice:class{constructor(msg){console.log(msg)}},Menu,PluginSettingTab,TFile}};
+window.module={exports:{}};
+const files=new Map(), folders=new Set();
+window.fakeApp={vault:{getFiles:()=>[...files.values()],getAbstractFileByPath:p=>files.get(p)||(folders.has(p)?{}:null),createFolder:async p=>folders.add(p),create:async(p,text)=>{const f={path:p,basename:p.split('/').pop().replace(/\.md$/,''),extension:p.endsWith('.md')?'md':'csv'};f.text=text;files.set(p,f);return f},read:async f=>f.text,modify:async(f,t)=>{f.text=t;}},workspace:{getLeavesOfType:()=>[],getLeaf:()=>({app:fakeApp}),revealLeaf:()=>{} }};
+</script><script src="../main.js"></script><script>
+(async()=>{const C=module.exports;const plugin=new C();plugin.app=fakeApp;await plugin.onload();const view=plugin._factory({app:fakeApp});window.cueflow=view;await view.onOpen();document.title='CueFlow preview';})();
+</script></body></html>
