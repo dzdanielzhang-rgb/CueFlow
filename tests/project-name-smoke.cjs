@@ -1,0 +1,24 @@
+'use strict';
+const assert=require('node:assert/strict'),Module=require('node:module'),original=Module._load;
+Module._load=function(name){if(name==='obsidian')return{Plugin:class{},ItemView:class{},Modal:class{},Setting:class{},Menu:class{},PluginSettingTab:class{},TFile:class{},Notice:class{}};return original.apply(this,arguments);};
+const t=require('../main.js').__test;let checks=0,reads=0;
+const files=new Map(),body=p=>'原始前言\n'+t.safeMarkdown(p)+'\n原始结尾';
+const make=(path,name)=>{const p=t.validateProject(t.makeExample());p.name=name;const f={path,basename:path.split('/').pop().replace(/\.md$/,''),extension:'md',stat:{mtime:1,size:0},text:body(p)};f.stat.size=Buffer.byteLength(f.text);files.set(path,f);return f;};
+const a=make('QA/原始文件A.md','数据名称 A'),b=make('QA/原始文件B.md','数据名称 B');
+const v=Object.create(t.CueFlowView.prototype);Object.assign(v,{file:a,project:t.parseProjectFile(a.text),dirty:false,editRevision:0,saveChain:Promise.resolve(),savedBlocks:new Map([[a.path,a.text.match(/```cueflow\s*\n([\s\S]*?)\n```/)[0]]]),plugin:{settings:{folder:'QA'},saveSettings:async()=>{}},history:[],historyIndex:0,render(){},pauseClock(){}});v.history=[JSON.stringify(v.project)];v.queueSave=()=>{v.dirty=true;v.editRevision++;};v.app={vault:{getFiles:()=>[...files.values()],read:async f=>{reads++;return f.text;},modify:async(f,text)=>{f.text=text;f.stat.mtime++;f.stat.size=Buffer.byteLength(text);}}};
+const label=file=>v.projectOptions().find(([path])=>path===file.path)[1];
+(async()=>{
+ await v.refreshFiles();assert.equal(label(a),'数据名称 A');assert.equal(label(b),'数据名称 B');checks++;
+ const cues=JSON.stringify(v.project.cues),lanes=JSON.stringify(v.project.lanes),path=a.path;
+ assert.equal(v.renameProject('  中文名称 <&> $  '),true);assert.equal(v.project.name,'中文名称 <&> $');assert.equal(label(a),'中文名称 <&> $');assert.equal(v.history.length,2);assert.equal(a.path,path);checks++;
+ assert.equal(await v.saveNow(),true);assert.ok(a.text.startsWith('原始前言')&&a.text.endsWith('原始结尾'));assert.equal(t.parseProjectFile(a.text).name,'中文名称 <&> $');assert.equal(JSON.stringify(v.project.cues),cues);assert.equal(JSON.stringify(v.project.lanes),lanes);checks++;
+ assert.equal(await v.openFile(b),true);assert.equal(label(a),'中文名称 <&> $');assert.equal(label(b),'数据名称 B');assert.equal(await v.openFile(a),true);assert.equal(v.project.name,'中文名称 <&> $');checks++;
+ v.renameProject('再改名');v.undo();assert.equal(label(a),'中文名称 <&> $');v.redo();assert.equal(label(a),'再改名');checks++;
+ let history=v.history.length;assert.equal(v.renameProject('  '),false);assert.equal(v.renameProject(null),false);assert.equal(v.history.length,history);assert.equal(v.project.name,'再改名');checks++;
+ assert.equal(v.renameProject('再改名'),true);assert.equal(v.history.length,history);checks++;
+ await v.saveNow();reads=0;await v.refreshFiles();assert.equal(reads,0);const next=t.parseProjectFile(b.text);next.name='外部修改名称';await v.app.vault.modify(b,body(next));await v.refreshFiles();assert.equal(label(b),'外部修改名称');assert.equal(reads,1);checks++;
+ const duplicate=make('QA/同名文件.md','再改名');await v.refreshFiles();assert.ok(label(a).startsWith('再改名（')&&label(duplicate).startsWith('再改名（'));assert.notEqual(label(a),label(duplicate));checks++;
+ const note={path:'QA/普通备注.md',basename:'普通备注',extension:'md',stat:{mtime:1,size:4},text:'普通备注'};files.set(note.path,note);await v.refreshFiles();assert.equal(label(note),'普通备注');checks++;
+ const normalRead=v.app.vault.read;b.stat.mtime++;v.app.vault.read=async f=>{if(f===b)throw Error('暂时不可读');return normalRead(f);};await v.refreshFiles();assert.equal(label(b),b.basename);v.app.vault.read=normalRead;await v.refreshFiles();assert.equal(label(b),'外部修改名称');checks++;
+ console.log('Project name PASS ('+checks+' targeted checks: saved titles, rename, persistence, switch/reopen, undo, blank/no-op, title cache and duplicate names).');
+})().catch(error=>{console.error(error);process.exitCode=1;});

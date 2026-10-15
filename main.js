@@ -810,7 +810,7 @@ class CueFlowView extends ItemView {
     if (this.canvasClickHandler) document.removeEventListener('click', this.canvasClickHandler);
     if (this.canvasBlurHandler) window.removeEventListener('blur', this.canvasBlurHandler);
     this.canvasClickHandler = null; this.canvasBlurHandler = null;
-    this.inlineEdit?.finish(true, true);
+    this.inlineEdit?.finish(true, true); this.projectNameCommit?.(true);
     this.pauseClock(); this.pointerCleanup?.();
     const pending = this.dirty || !!this.saveTimer;
     if (this.saveTimer) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
@@ -821,6 +821,38 @@ class CueFlowView extends ItemView {
   async refreshFiles() {
     const folder = this.plugin.settings.folder;
     this.files = this.app.vault.getFiles().filter(f => f.path.startsWith(`${folder}/`) && f.extension === 'md').sort((a,b) => a.basename.localeCompare(b.basename, 'zh-CN'));
+    this.projectTitles ||= new Map();
+    const paths = new Set(this.files.map(f => f.path));
+    for (const path of this.projectTitles.keys()) if (!paths.has(path)) this.projectTitles.delete(path);
+    await Promise.allSettled(this.files.map(async file => {
+      const cached = this.projectTitles.get(file.path);
+      if (file.stat && cached?.mtime === file.stat.mtime && cached?.size === file.stat.size) return;
+      try {
+        const raw = await this.app.vault.read(file), match = raw.match(BLOCK_RE), name = match && JSON.parse(match[1]).name;
+        this.cacheProjectTitle(file, typeof name === 'string' && name.trim() ? name.trim() : file.basename);
+      } catch { this.projectTitles.delete(file.path); }
+    }));
+  }
+  cacheProjectTitle(file, name) {
+    this.projectTitles ||= new Map();
+    this.projectTitles.set(file.path, { name, mtime: file.stat?.mtime, size: file.stat?.size });
+  }
+  projectOptions() {
+    const entries = (this.files || []).map(file => [file.path, file.path === this.file?.path && this.project ? this.project.name : this.projectTitles?.get(file.path)?.name || file.basename]);
+    const counts = new Map(); for (const [, name] of entries) counts.set(name, (counts.get(name) || 0) + 1);
+    return entries.map(([path, name]) => [path, counts.get(name) > 1 ? name + '（' + path + '）' : name]);
+  }
+  syncProjectTitleUI() {
+    const labels = new Map(this.projectOptions());
+    this.projectPickerEl?.querySelectorAll('option').forEach(option => { option.textContent = labels.get(option.value) || option.textContent; });
+    if (this.projectNameInput && document.activeElement !== this.projectNameInput) this.projectNameInput.value = this.project.name;
+    this.contentEl?.querySelector('.cueflow-project-title')?.setText(this.project.name);
+  }
+  renameProject(value) {
+    const name = String(value ?? '').trim();
+    if (!name) { new Notice('项目名称不能为空'); return false; }
+    if (name !== this.project.name) { this.project.name = name; this.recordChange(false); }
+    this.syncProjectTitleUI(); return true;
   }
   async ensureFolder() {
     this.plugin.settings.folder = normalizeFolder(this.plugin.settings.folder);
@@ -845,7 +877,7 @@ class CueFlowView extends ItemView {
   }
   async openFile(file, discardUnsaved = false) {
     try {
-      this.inlineEdit?.finish(true, true);
+      this.inlineEdit?.finish(true, true); this.projectNameCommit?.(true);
       if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
       if (this.dirty && !discardUnsaved && !(await this.saveNow())) return false;
       await this.saveChain;
@@ -853,6 +885,7 @@ class CueFlowView extends ItemView {
       const raw = await this.app.vault.read(file), match = raw.match(BLOCK_RE);
       if (!match) throw new Error('没有找到 ```cueflow 数据块');
       const project = validateProject(JSON.parse(match[1]));
+      this.cacheProjectTitle(file, project.name);
       this.pointerCleanup?.(); this.file = file; this.project = project; this.selectedId = null; this.selectedIds = new Set(); this.selectedConnectionId = null; this.pendingLinkId = null;
       this.savedBlocks.set(file.path, match[0]); this.dirty = false; this.saveError = '';
       this.collapsedGroups = new Set();
@@ -905,6 +938,7 @@ class CueFlowView extends ItemView {
       if (current !== result) await this.app.vault.modify(file, result);
       if (!this.savedBlocks) this.savedBlocks = new Map();
       this.savedBlocks.set(file.path, block);
+      this.cacheProjectTitle(file, snapshot.name); this.syncProjectTitleUI();
       if (this.file?.path === file.path && this.editRevision === revision) { this.dirty = false; this.saveError = ''; this.updateSaveStatus(); }
       return true;
     }).catch(err => {
@@ -1563,6 +1597,7 @@ class CueFlowView extends ItemView {
   }
   render(preserveScroll = false) {
     if (!this.project) return;
+    this.projectNameCommit?.(true);
     this.pointerCleanup?.();
     this.inlineEdit?.finish(true, true);
     if (this.selectedId && !this.project.cues.some(cue => cue.id === this.selectedId)) this.selectedId = null;
@@ -1577,9 +1612,26 @@ class CueFlowView extends ItemView {
     this.scale = clamp(this.scale, ZOOMS[0]/60, ZOOMS[ZOOMS.length - 1]/60);
     const top = root.createDiv({ cls: 'cueflow-toolbar' });
     const brand = top.createDiv({ cls: 'cueflow-brand' }); brand.createSpan({ text: '◈', cls: 'cueflow-brand-symbol' }); brand.createSpan({ text: 'CueFlow' });
-    select(top, this.files.map(f => [f.path, f.basename]), this.file?.path, async path => {
-      const file = this.files.find(f => f.path === path); if (file) await this.openFile(file);
-    }, '切换项目');
+    const picker = top.createDiv({ cls: 'cueflow-project-picker' }); this.projectPickerEl = picker;
+    const nameInput = picker.createEl('input', { type:'text', cls:'cueflow-project-name', attr:{'aria-label':'项目名称',title:'直接编辑项目名称；Enter 或移开焦点保存，Esc 取消'} });
+    this.projectNameInput = nameInput; nameInput.value = this.project.name;
+    const namingProject = this.project; let committedName = this.project.name;
+    const commitName = fromBlur => {
+      if (this.project !== namingProject || nameInput.value === committedName) return true;
+      if (this.renameProject(nameInput.value)) { nameInput.value = this.project.name; committedName = this.project.name; return true; }
+      if (fromBlur) { nameInput.value = this.project.name; committedName = this.project.name; }
+      return false;
+    };
+    this.projectNameCommit = commitName;
+    nameInput.addEventListener('blur', () => commitName(true));
+    nameInput.addEventListener('keydown', e => {
+      e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Enter') { e.preventDefault(); if (commitName(false)) this.scroller.focus({preventScroll:true}); }
+      if (e.key === 'Escape') { e.preventDefault(); nameInput.value = this.project.name; this.scroller.focus({preventScroll:true}); }
+    });
+    const switcher = select(picker, this.projectOptions(), this.file?.path, async path => {
+      const file = this.files.find(f => f.path === path); if (file && !(await this.openFile(file))) switcher.value = this.file?.path || '';
+    }, '切换项目'); switcher.addClass('cueflow-project-switch');
     btn(top, '+ 项目', () => new StringModal(this.app, '新建脚本项目', '项目名称', '新演示脚本', n => this.createProject(n)).open());
     btn(top, '项目设置', () => new ProjectDurationModal(this, true).open());
     btn(top, '显示设置', () => new DisplaySettingsModal(this).open());
