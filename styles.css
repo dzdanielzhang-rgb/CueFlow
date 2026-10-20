@@ -128,9 +128,11 @@
 .cueflow-milestone .cueflow-port-right { right:0; }
 .cueflow-milestone .cueflow-port-top { top:0; left:50%; }
 .cueflow-milestone .cueflow-port-bottom { bottom:0; left:50%; }
-.cueflow-links { --cueflow-dependency-color:var(--interactive-accent); --cueflow-relation-color:var(--color-cyan,#098c87); }
+.cueflow-links { --cueflow-dependency-color:var(--interactive-accent); --cueflow-relation-color:var(--color-cyan,#098c87); --cueflow-sync-color:var(--color-orange,#b87312); }
 .cueflow-link-dependency { --cueflow-link-color:var(--cueflow-dependency-color); }
 .cueflow-link-relation { --cueflow-link-color:var(--cueflow-relation-color); }
+.cueflow-link-sync-start,.cueflow-link-sync-end { --cueflow-link-color:var(--cueflow-sync-color); }
+.cueflow-link-near .cueflow-link-main { stroke-width:2px; }
 .cueflow-link-halo,.cueflow-link-main { fill:none; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; vector-effect:non-scaling-stroke; }
 .cueflow-link-halo { stroke:var(--background-primary); stroke-width:7px; opacity:.97; }
 .cueflow-link-main { stroke:var(--cueflow-link-color); stroke-width:2.5px; opacity:.95; }
@@ -149,6 +151,7 @@
 .cueflow-link-legend { display:inline-flex; gap:10px; color:var(--text-muted); font-size:11px; white-space:nowrap; }
 .cueflow-legend-dependency { color:var(--interactive-accent); }
 .cueflow-legend-relation { color:var(--color-cyan,#098c87); }
+.cueflow-legend-sync { color:var(--color-orange,#b87312); }
 
 .cueflow-alignment-guides { position:absolute; inset:0; pointer-events:none; z-index:14; overflow:visible; }
 .cueflow-align-vertical { position:absolute; top:0; bottom:0; width:0; border-left:2px dashed var(--interactive-accent); opacity:.95; }

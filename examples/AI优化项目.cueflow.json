@@ -1,7 +1,7 @@
 {
   "format": "cueflow.project",
   "formatVersion": 1,
-  "exportedAt": "2026-10-15T06:53:01.845Z",
+  "exportedAt": "2026-10-20T02:00:00.000Z",
   "aiGuide": {
     "goal": "减少人员时间冲突，优先保留关键动作。",
     "rules": [
@@ -9,14 +9,15 @@
       "保持动作、泳道、分组和连线的 ID；除非用户明确要求，不删除动作、不取消 critical 关键标记、不更改 dependsOn 依赖。",
       "dependsOn 为前置动作 ID 数组，语义为前置结束后本动作开始；不得形成循环。",
       "relations 仅表示关联/目标，fromPort/toPort 为 top 或 bottom；这些箭头不参与排期。",
+      "syncLinks 为同步约束：mode=start 时两动作开始时间相同，mode=end 时结束时间相同；保持这些约束及 ID。",
       "critical=true 为关键动作，优先保留并说明调整理由；durationSec=0 为里程碑，保持零时长。",
       "同 laneId 的非零动作尽量不重叠；无法消除的冲突需明确说明，不得虚构资源。",
-      "保留 name、note、status、groups、lanes、relations、dependencyLabels 等完整数据；durationSec 应覆盖所有动作。",
+      "保留 name、note、status、groups、lanes、relations、syncLinks、dependencyLabels 等完整数据；durationSec 应覆盖所有动作。",
       "critical 必须为 true/false 布尔值，status 只能是 planned、active 或 done；不要翻译字段名或 ID。",
       "只修改 project 内的项目数据；返回完整文件，并在 optimizationNotes 数组用中文说明修改、收益及未解决问题。"
     ],
     "fields": {
-      "projectVersion": 4,
+      "projectVersion": 5,
       "startSec": "相对开始秒数",
       "durationSec": "持续秒数；项目顶层为总时长",
       "laneId": "执行人员/设备泳道 ID",
@@ -24,12 +25,13 @@
       "critical": "关键动作布尔值",
       "dependsOn": "前置动作 ID 数组",
       "relations": "不参与排期的关联箭头",
+      "syncLinks": "同时开始/同时结束的同步约束",
       "dependencyLabels": "依赖箭头文字标注"
     },
     "returnFormat": "返回同结构完整 JSON，或仅包含一个 cueflow 数据块的 Markdown；不要只返回 CSV、片段或修改建议。"
   },
   "project": {
-    "version": 4,
+    "version": 5,
     "relations": [],
     "dependencyLabels": [],
     "name": "无人机空地协同演示（示例）",
@@ -165,6 +167,15 @@
           "cue-mv96mf4k-fvziv7"
         ],
         "status": "planned"
+      }
+    ],
+    "syncLinks": [
+      {
+        "id": "sync-example-opening",
+        "from": "cue-mv96mf4k-8uqzme",
+        "to": "cue-mv96mf4k-ocxwwh",
+        "mode": "start",
+        "label": ""
       }
     ]
   },
