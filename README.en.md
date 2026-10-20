@@ -2,7 +2,7 @@
 
 **Plan a live demonstration in Obsidian with a seconds-based timeline for people, equipment and actions.**
 
-[中文首页](README.md) · [Download 0.10.0](https://github.com/dzdanielzhang-rgb/CueFlow/releases/tag/0.10.0) · [User guide (Chinese)](docs/USER_GUIDE.md) · [Issues](https://github.com/dzdanielzhang-rgb/CueFlow/issues)
+[中文首页](README.md) · [Download 0.10.0](https://github.com/dzdanielzhang-rgb/CueFlow/releases/tag/0.10.0) · [Core features with examples (Chinese)](docs/CORE_FEATURES.md) · [User guide (Chinese)](docs/USER_GUIDE.md) · [Issues](https://github.com/dzdanielzhang-rgb/CueFlow/issues)
 
 CueFlow is a local-first Obsidian desktop plugin for presentations, stage operations, multi-device demonstrations and run-of-show planning. Organize resources into groups and lanes, drag actions on a relative timeline, and connect actions with dependencies, synchronization or visual associations. The interface is currently in Chinese.
 
@@ -29,6 +29,8 @@ CueFlow is a local-first Obsidian desktop plugin for presentations, stage operat
 No npm, account, API key or other task plugin is required. The GitHub **Source code** archive is a source snapshot; the named plugin ZIP is the installation package. See the [installation guide](docs/INSTALLATION.md) for upgrades and rollback.
 
 ## Essential controls
+
+Grouping organizes resources; it does not synchronize actions. Zoom changes the view, while resizing changes duration. For A at 30–50 seconds and B with a 40-second duration, dragging A's left port to B's left port places B at 30–70; right-to-right places B at 10–50, assuming no other constraints. A critical star highlights an action without locking its time. See the [worked examples](docs/CORE_FEATURES.md) for batch scaling, internal-only relationship copying and external AI round trips.
 
 | Action | Control |
 |---|---|
